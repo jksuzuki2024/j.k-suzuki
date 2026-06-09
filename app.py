@@ -11,23 +11,26 @@ KOLKATA_TZ = pytz.timezone("Asia/Kolkata")
 # Shroom er nijossho fixed QR content
 SHOWROOM_QR_SECRET = "JK_SUZUKI_SHOWROOM_OFFICIAL_ATTENDANCE_2026"
 
-DEFAULT_USERS = pd.DataFrame([
+# Default Employee List (Prothom barer jonne)
+DEFAULT_USERS = [
     {"ID": "101", "Name": "Amit Kumar", "Password": "password101", "Role": "Employee", "Base_Salary": 15000},
     {"ID": "102", "Name": "Rahul Singh", "Password": "password102", "Role": "Employee", "Base_Salary": 12000},
     {"ID": "admin", "Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0}
-])
+]
 
-# Initialize global session memory for persistent local storage
+# Persistent State Storage initialization
+if "user_list" not in st.session_state:
+    st.session_state.user_list = DEFAULT_USERS.copy()
+
 if "attendance_list" not in st.session_state:
     st.session_state.attendance_list = []
 
-# Core Logic: Session memory converted to DataFrame
+# Convert to pandas dataframes
+user_df = pd.DataFrame(st.session_state.user_list)
 if st.session_state.attendance_list:
     att_df = pd.DataFrame(st.session_state.attendance_list)
 else:
     att_df = pd.DataFrame(columns=["Date", "ID", "Name", "Entry Time", "Exit Time", "Status"])
-
-user_df = DEFAULT_USERS.copy()
 
 def calculate_emp_salary(emp_id, base_salary, att_dataframe):
     total_days = 30 
@@ -80,6 +83,7 @@ if not st.session_state.logged_in:
             st.error("Invalid ID or Password! Please try again.")
 
 else:
+    # Sidebar Profile
     st.sidebar.subheader(f"👤 Profile: {st.session_state.user_name}")
     st.sidebar.write(f"**ID No:** {st.session_state.user_id}")
     st.sidebar.write(f"**Role:** {st.session_state.user_role}")
@@ -129,7 +133,7 @@ else:
                         "Entry Time": current_time, "Exit Time": "Not Out Yet", "Status": "Present"
                     }
                     st.session_state.attendance_list.append(new_row)
-                    st.success("✅ ENTRY Recorded Successfully in Dashboard memory!")
+                    st.success("✅ ENTRY Recorded Successfully!")
                     st.rerun()
                 else:
                     st.error("❌ ভুল QR Code!")
@@ -143,7 +147,7 @@ else:
                     for record in st.session_state.attendance_list:
                         if record["Date"] == current_date and record["ID"] == current_user_id:
                             record["Exit Time"] = current_time
-                    st.success("✅ EXIT Recorded Successfully in Dashboard memory!")
+                    st.success("✅ EXIT Recorded Successfully!")
                     st.rerun()
         else:
             st.success("🎉 Today's Attendance Completed!")
@@ -156,10 +160,9 @@ else:
     elif st.session_state.user_role == "Admin":
         st.subheader("👑 Owner / Admin Control Panel")
         
-        # EXCEL GENERATOR & DOWNLOAD BUTTON FOR COMPUTER
+        # EXCEL DOWNLOAD FOR MICROSOFT EXCEL SOFTWARE
         st.markdown("### 📥 Download Attendance Data to Microsoft Excel")
         if not att_df.empty:
-            # InMemory bytes conversion for pure excel .xlsx framework
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                 att_df.to_excel(writer, index=False, sheet_name='Attendance_Sheet')
@@ -175,10 +178,36 @@ else:
             st.info("No attendance recorded yet to download.")
             
         st.markdown("---")
+        
+        # ADD NEW EMPLOYEE OPTION (KOTHA CHILO)
+        with st.expander("➕ Click to Add New Employee Account (নতুন কর্মচারী যোগ করুন)"):
+            new_id = st.text_input("New Employee ID (যেমন: 103):").strip()
+            new_name = st.text_input("New Employee Full Name:").strip()
+            new_pass = st.text_input("Set Password for Employee:").strip()
+            new_sal = st.number_input("Monthly Base Salary (টাকা):", min_value=0, value=12000, step=500)
+            
+            if st.button("Create Account & Save"):
+                if str(new_id) in [str(u["ID"]) for u in st.session_state.user_list]:
+                    st.error("❌ This ID already exists! Please use a unique ID.")
+                elif new_id=="" or new_name=="" or new_pass=="":
+                    st.error("❌ Please fill all the text boxes!")
+                else:
+                    new_employee = {
+                        "ID": str(new_id), 
+                        "Name": new_name, 
+                        "Password": new_pass, 
+                        "Role": "Employee", 
+                        "Base_Salary": new_sal
+                    }
+                    st.session_state.user_list.append(new_employee)
+                    st.success(f"✅ Account created successfully for {new_name} (ID: {new_id})!")
+                    st.rerun()
+
+        st.markdown("---")
         with st.expander("🖨 Showroom Official QR Code"):
             st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={SHOWROOM_QR_SECRET}")
         
-        search_id = st.text_input("🔍 Search Employee ID:").strip()
+        search_id = st.text_input("🔍 Search Employee ID to View Salary Status:").strip()
         if search_id != "":
             emp_info = user_df[user_df["ID"] == str(search_id)]
             if not emp_info.empty:
@@ -186,9 +215,12 @@ else:
                 base_sal = emp_info.iloc[0]["Base_Salary"]
                 p_days, h_days, a_days, p_sal, ded = calculate_emp_salary(search_id, base_sal, att_df)
                 
-                st.subheader(f"📊 Report of {emp_name}")
-                st.write(f"Present: {p_days} Days | Base: ₹{base_sal} | **Net Payable: ₹{p_sal}**")
+                st.subheader(f"📊 Live Salary Sheet of {emp_name}")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Present Days", f"{p_days} / 30 Days")
+                col2.metric("Absence Deduction", f"- ₹{ded}")
+                col3.metric("Net Payable Salary", f"₹{p_sal}")
         
         st.markdown("---")
-        st.subheader("📋 Overall Live Attendance Sheet")
+        st.subheader("📋 Overall Live Attendance Sheet (All Employees)")
         st.dataframe(att_df, use_container_width=True)
