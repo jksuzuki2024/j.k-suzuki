@@ -2,3 +2,5 @@ streamlit
 pandas
 streamlit-qrcode-scanner
 pytz
+st-files-connection
+st-gsheets-connection
