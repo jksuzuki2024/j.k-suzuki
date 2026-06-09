@@ -3,15 +3,14 @@ import pandas as pd
 import os
 from datetime import datetime
 import pytz  # Timezone thik korar jonne
-from streamlit_qrcode_scanner import qrcode_scanner
 
-# Timezone Kolkata set kora holo (Real-time vul dekhabe na)
+# Timezone Kolkata set kora holo (Real-time thik thakbe)
 KOLKATA_TZ = pytz.timezone("Asia/Kolkata")
 
 ATTENDANCE_FILE = "showroom_attendance.csv"
 USER_FILE = "showroom_users.csv"
 
-# Shroom er nijossho fixed QR content (Jeta print out kore showroom a lagano thakbe)
+# Shroom er nijossho fixed QR content
 SHOWROOM_QR_SECRET = "JK_SUZUKI_SHOWROOM_OFFICIAL_ATTENDANCE_2026"
 
 DEFAULT_USERS = pd.DataFrame([
@@ -32,43 +31,54 @@ def load_data():
         att_df = pd.DataFrame(columns=["Date", "ID", "Name", "Entry Time", "Exit Time", "Status"])
 
     if os.path.exists(USER_FILE):
-        user_df = pd.read_csv(USER_FILE)
-        user_df["ID"] = user_df["ID"].astype(str).str.strip()
+        try:
+            user_df = pd.read_csv(USER_FILE)
+            user_df["ID"] = user_df["ID"].astype(str).str.strip()
+        except:
+            user_df = DEFAULT_USERS.copy()
     else:
-        user_df = DEFAULT_USERS
+        user_df = DEFAULT_USERS.copy()
         user_df["ID"] = user_df["ID"].astype(str).str.strip()
         user_df.to_csv(USER_FILE, index=False)
         
     return att_df, user_df
 
+# Excel/CSV file strict save logic
 def save_attendance(df):
     df.to_csv(ATTENDANCE_FILE, index=False)
+    # Cache clear kore data refresh kora hocche
+    st.variant_changed = True 
 
 def save_users(df):
-    df.to_csv(USER_FILE, index=False)
+    user_df.to_csv(USER_FILE, index=False)
 
-# Salary Calculation Logic (4 din chuti bad e katar jonne)
+# Salary Calculation Logic (4 din chuti paid, baki absent hole taka katbe)
 def calculate_emp_salary(emp_id, base_salary, att_dataframe):
-    # Total month days = 30 dhorলাম আপাতত
     total_days = 30 
-    allowed_holidays = 4 # Mas e 4 te chuti fix, payment katbe na
+    allowed_holidays = 4 
     
-    # Employee koydin present chilo ta check
     emp_logs = att_dataframe[att_dataframe["ID"] == str(emp_id)]
     present_days = emp_logs["Date"].nunique() if not emp_logs.empty else 0
     
-    # Paid days = Present days + 4 din chuti (Kintu total month days er beshi hote parbe na)
     paid_days = min(present_days + allowed_holidays, total_days)
     absent_days = max(0, total_days - paid_days)
     
-    # Salary calculation
     per_day_salary = base_salary / total_days
     payable_salary = round(paid_days * per_day_salary, 2)
     deduction = round(absent_days * per_day_salary, 2)
     
     return present_days, allowed_holidays, absent_days, payable_salary, deduction
 
-att_df, user_df = load_data()
+# Data Load kora holo
+if 'data_loaded' not in st.session_state or st.session_state.get('variant_changed', False):
+    att_df, user_df = load_data()
+    st.session_state.att_df = att_df
+    st.session_state.user_df = user_df
+    st.session_state.data_loaded = True
+    st.session_state.variant_changed = False
+else:
+    att_df = st.session_state.att_df
+    user_df = st.session_state.user_df
 
 st.set_page_config(page_title="JK Suzuki Management", layout="wide")
 st.title("🏍️ JK Suzuki Attendance & Salary System")
@@ -107,21 +117,22 @@ else:
     st.sidebar.write(f"**ID No:** {st.session_state.user_id}")
     st.sidebar.write(f"**Role:** {st.session_state.user_role}")
     
-    # Employee der nijeder profile a live salary & chuti dekhano holo
+    # Employee Profile Live Salary
     if st.session_state.user_role == "Employee":
         emp_info = user_df[user_df["ID"] == st.session_state.user_id]
-        base_sal = emp_info.iloc[0]["Base_Salary"]
-        p_days, h_days, a_days, p_sal, ded = calculate_emp_salary(st.session_state.user_id, base_sal, att_df)
-        
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("💰 Your Live Salary Report")
-        st.sidebar.write(f"**Base Salary:** ₹{base_sal}")
-        st.sidebar.write(f"**Present Today:** {p_days} Days")
-        st.sidebar.write(f"**Monthly Offs:** {h_days} Days (Paid)")
-        st.sidebar.write(f"**Absent Days:** {a_days} Days (Unpaid)")
-        st.sidebar.success(f"**Current Payable:** ₹{p_sal}")
-        if ded > 0:
-            st.sidebar.error(f"**Deduction (Absence):** -₹{ded}")
+        if not emp_info.empty:
+            base_sal = emp_info.iloc[0]["Base_Salary"]
+            p_days, h_days, a_days, p_sal, ded = calculate_emp_salary(st.session_state.user_id, base_sal, att_df)
+            
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("💰 Your Live Salary Report")
+            st.sidebar.write(f"**Base Salary:** ₹{base_sal}")
+            st.sidebar.write(f"**Present Today:** {p_days} Days")
+            st.sidebar.write(f"**Monthly Offs:** {h_days} Days (Paid)")
+            st.sidebar.write(f"**Absent Days:** {a_days} Days (Unpaid)")
+            st.sidebar.success(f"**Current Payable:** ₹{p_sal}")
+            if ded > 0:
+                st.sidebar.error(f"**Deduction (Absence):** -₹{ded}")
 
     if st.sidebar.button("Logout", type="secondary"):
         st.session_state.logged_in = False
@@ -132,11 +143,12 @@ else:
         
     st.sidebar.markdown("---")
 
-    # ==================== 1. Employee Screen (Strict Live QR Scanner) ====================
+    # ==================== 1. Employee Screen ====================
     if st.session_state.user_role == "Employee":
         st.subheader("📷 Shroom Live Attendance Scanner")
         
-        # Kolkata TZ onujayi real time exact thik kora holo
+        from streamlit_qrcode_scanner import qrcode_scanner
+        
         now_kolkata = datetime.now(KOLKATA_TZ)
         current_date = str(now_kolkata.date())
         current_time = now_kolkata.strftime("%I:%M %p")
@@ -147,9 +159,8 @@ else:
         today_entry = att_df[(att_df["Date"] == current_date) & (att_df["ID"] == current_user_id)]
         
         if today_entry.empty:
-            st.warning("📋 আপনার আজকের হাজিরা দেওয়া হয়নি। শোরুমের দেওয়ালে থাকা QR Code টি নিচের লাইভ ক্যামেরার সামনে ধরুন। (গ্যালারি থেকে স্ক্যান হবে না)")
+            st.warning("📋 আপনার আজকের হাজিরা দেওয়া হয়নি। শোরুমের দেওয়ালে থাকা QR Code টি নিচের লাইভ ক্যামেরার সামনে ধরুন।")
             
-            # Camera on hobe, gallery select korar option thakbe na
             qr_code_value = qrcode_scanner(key='qr_scanner_entry')
             
             if qr_code_value:
@@ -164,8 +175,8 @@ else:
                     }
                     att_df = pd.concat([att_df, pd.DataFrame([new_row])], ignore_index=True)
                     save_attendance(att_df)
-                    st.success("✅ ENTRY Recorded Successfully via Live Scan!")
-                    st.balloons()
+                    st.success("✅ ENTRY Recorded & Saved Successfully!")
+                    st.session_state.variant_changed = True
                     st.rerun()
                 else:
                     st.error("❌ ভুল QR Code! দয়া করে শোরুমের আসল QR Code টি স্ক্যান করুন।")
@@ -180,8 +191,8 @@ else:
                     idx = att_df[(att_df["Date"] == current_date) & (att_df["ID"] == current_user_id)].index
                     att_df.loc[idx, "Exit Time"] = current_time
                     save_attendance(att_df)
-                    st.success("✅ EXIT Recorded Successfully! Have a good day.")
-                    st.balloons()
+                    st.success("✅ EXIT Recorded & Saved Successfully!")
+                    st.session_state.variant_changed = True
                     st.rerun()
                 else:
                     st.error("❌ ভুল QR Code! দয়া করে শোরুমের আসল QR Code টি স্ক্যান করুন।")
@@ -200,9 +211,8 @@ else:
     elif st.session_state.user_role == "Admin":
         st.subheader("👑 Owner / Admin Control Panel")
         
-        # Admin can view or print the QR code from here
-        with st.expander("🖨️ Showroom Official QR Code (Print & Paste This)"):
-            st.write("নিচের এই কিউআর কোডটি বড় করে স্ক্রিনশট নিন অথবা প্রিন্ট করে শোরুমের দেওয়ালে বা গেটে লাগিয়ে দিন।")
+        with st.expander("🖨 *Showroom Official QR Code (Print & Paste This)*"):
+            st.write("নিচের এই কিউআর কোডটি বড় করে প্রিন্ট করে শোরুমের দেওয়ালে লাগিয়ে দিন।")
             st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={SHOWROOM_QR_SECRET}", caption="JK Suzuki Official QR Code")
         
         search_id = st.text_input("🔍 Type Employee ID No to Search Profile & Salary:", placeholder="e.g. 101").strip()
@@ -215,13 +225,11 @@ else:
                 base_sal = emp_info.iloc[0]["Base_Salary"]
                 role = emp_info.iloc[0]["Role"]
                 
-                st.success(f"👤 Employee Profile Found: **{emp_name}** (Role: {role})")
+                st.success(f"👤 Employee Profile Found: **{emp_name}**")
                 
-                # Calculate Salary with 4 holidays logic
                 p_days, h_days, a_days, p_sal, ded = calculate_emp_salary(search_id, base_sal, att_df)
                 
                 col1, col2 = st.columns([2, 1])
-                
                 with col1:
                     st.subheader(f"📅 Attendance Logs for {emp_name}")
                     emp_att = att_df[att_df["ID"] == str(search_id)]
@@ -231,7 +239,7 @@ else:
                         st.info("This employee hasn't recorded any attendance yet.")
                         
                 with col2:
-                    st.subheader("💰 Live Absent-Based Salary Status")
+                    st.subheader("💰 Absent-Based Salary Status")
                     st.metric("Total Present Days", f"{p_days} Days")
                     st.metric("Allowed Paid Offs (4 Chuti)", f"{h_days} Days")
                     st.metric("Absent Days (Money Cut)", f"{a_days} Days")
@@ -249,6 +257,7 @@ else:
                 if os.path.exists(ATTENDANCE_FILE):
                     os.remove(ATTENDANCE_FILE)
                     st.success("All old history deleted successfully!")
+                    st.session_state.variant_changed = True
                     st.rerun()
                     
         if not att_df.empty:
@@ -270,6 +279,7 @@ else:
                 else:
                     new_u = {"ID": str(new_id), "Name": new_name, "Password": new_pass, "Role": "Employee", "Base_Salary": new_sal}
                     user_df = pd.concat([user_df, pd.DataFrame([new_u])], ignore_index=True)
-                    save_users(user_df)
-                    st.success(f"Account created successfully for {new_name} (ID: {new_id})!")
+                    user_df.to_csv(USER_FILE, index=False)
+                    st.success(f"Account created successfully for {new_name}!")
+                    st.session_state.variant_changed = True
                     st.rerun()
