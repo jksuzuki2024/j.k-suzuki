@@ -3,7 +3,7 @@ import pandas as pd
 import os
 from datetime import datetime
 import pytz
-from streamlit_gsheets import GSheetsConnection  # Google sheet er automatic connection
+import io
 
 # Timezone Kolkata set kora holo
 KOLKATA_TZ = pytz.timezone("Asia/Kolkata")
@@ -17,26 +17,17 @@ DEFAULT_USERS = pd.DataFrame([
     {"ID": "admin", "Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0}
 ])
 
-# Google Sheet theke data direct load o save korar logic
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    att_df = conn.read(ttl="0d")  # Live fresh data load
-    # Column thik thakle strip kora hobe
-    if not att_df.empty and "ID" in att_df.columns:
-        att_df["ID"] = att_df["ID"].astype(str).str.strip()
-        att_df["Date"] = att_df["Date"].astype(str).str.strip()
-except:
-    # Error records control
+# Initialize global session memory for persistent local storage
+if "attendance_list" not in st.session_state:
+    st.session_state.attendance_list = []
+
+# Core Logic: Session memory converted to DataFrame
+if st.session_state.attendance_list:
+    att_df = pd.DataFrame(st.session_state.attendance_list)
+else:
     att_df = pd.DataFrame(columns=["Date", "ID", "Name", "Entry Time", "Exit Time", "Status"])
 
 user_df = DEFAULT_USERS.copy()
-
-def save_to_google_sheet(df):
-    try:
-        conn.update(data=df)
-        st.session_state.att_df = df
-    except:
-        st.error("Google Sheet error! Please check configurations.")
 
 def calculate_emp_salary(emp_id, base_salary, att_dataframe):
     total_days = 30 
@@ -137,9 +128,8 @@ else:
                         "Date": current_date, "ID": current_user_id, "Name": st.session_state.user_name,
                         "Entry Time": current_time, "Exit Time": "Not Out Yet", "Status": "Present"
                     }
-                    att_df = pd.concat([att_df, pd.DataFrame([new_row])], ignore_index=True)
-                    save_to_google_sheet(att_df)
-                    st.success("✅ ENTRY Auto-Saved to Computer Excel Sheet!")
+                    st.session_state.attendance_list.append(new_row)
+                    st.success("✅ ENTRY Recorded Successfully in Dashboard memory!")
                     st.rerun()
                 else:
                     st.error("❌ ভুল QR Code!")
@@ -150,18 +140,41 @@ else:
             
             if qr_code_value:
                 if qr_code_value == SHOWROOM_QR_SECRET:
-                    idx = att_df[(att_df["Date"] == current_date) & (att_df["ID"] == current_user_id)].index
-                    att_df.loc[idx, "Exit Time"] = current_time
-                    save_to_google_sheet(att_df)
-                    st.success("✅ EXIT Auto-Saved to Computer Excel Sheet!")
+                    for record in st.session_state.attendance_list:
+                        if record["Date"] == current_date and record["ID"] == current_user_id:
+                            record["Exit Time"] = current_time
+                    st.success("✅ EXIT Recorded Successfully in Dashboard memory!")
                     st.rerun()
         else:
             st.success("🎉 Today's Attendance Completed!")
+            
+        st.markdown("---")
+        st.subheader("📊 Your Personal Logs")
+        st.dataframe(att_df[att_df["ID"] == current_user_id], use_container_width=True)
 
     # ==================== 2. Admin Screen ====================
     elif st.session_state.user_role == "Admin":
         st.subheader("👑 Owner / Admin Control Panel")
         
+        # EXCEL GENERATOR & DOWNLOAD BUTTON FOR COMPUTER
+        st.markdown("### 📥 Download Attendance Data to Microsoft Excel")
+        if not att_df.empty:
+            # InMemory bytes conversion for pure excel .xlsx framework
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                att_df.to_excel(writer, index=False, sheet_name='Attendance_Sheet')
+            
+            st.download_button(
+                label="📥 Click to Download Microsoft Excel File (.xlsx)",
+                data=buffer.getvalue(),
+                file_name=f"JK_Suzuki_Attendance_{datetime.now().strftime('%d-%m-%Y')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+        else:
+            st.info("No attendance recorded yet to download.")
+            
+        st.markdown("---")
         with st.expander("🖨 Showroom Official QR Code"):
             st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={SHOWROOM_QR_SECRET}")
         
