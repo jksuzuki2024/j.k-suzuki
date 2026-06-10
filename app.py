@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 import pytz
 import io
+import qrcode
+from PIL import Image
 
 # Timezone Kolkata
 KOLKATA_TZ = pytz.timezone("Asia/Kolkata")
@@ -11,22 +13,20 @@ KOLKATA_TZ = pytz.timezone("Asia/Kolkata")
 # Fixed QR Secret
 SHOWROOM_QR_SECRET = "JK_SUZUKI_SHOWROOM_OFFICIAL_ATTENDANCE_2026"
 
-# 100% সুরক্ষিত হার্ডকোডেড ব্যাকআপ (এখানে আইডি পাসওয়ার্ড দিলে সার্ভার রিফ্রেশ হলেও ডিলিট হবে না)
+# Permament ID-Password Backup (Apnar shob ID ekhane permanent safe thakbe)
 FIXED_ACCOUNTS = {
     "admin": {"Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0},
     "101": {"Name": "Amit Kumar", "Password": "password101", "Role": "Employee", "Base_Salary": 15000},
     "102": {"Name": "Rahul Singh", "Password": "password102", "Role": "Employee", "Base_Salary": 12000},
-    "114": {"Name": "Jahir", "Password": "jahir", "Role": "Employee", "Base_Salary": 12000} # জাহিরের আইডি এখানে পার্মানেন্ট লক করে দেওয়া হলো
+    "114": {"Name": "Jahir", "Password": "jahir", "Role": "Employee", "Base_Salary": 12000}
 }
 
-# Session State persistent configuration
 if "custom_users" not in st.session_state:
     st.session_state.custom_users = FIXED_ACCOUNTS.copy()
 
 if "attendance_records" not in st.session_state:
     st.session_state.attendance_records = []
 
-# Dataframe compiler from safe state
 att_df = pd.DataFrame(st.session_state.attendance_records) if st.session_state.attendance_records else pd.DataFrame(columns=["Date", "ID", "Name", "Entry Time", "Exit Time", "Status"])
 
 def calculate_emp_salary(emp_id, base_salary, att_dataframe):
@@ -140,7 +140,21 @@ else:
             st.info("No attendance recorded yet to download.")
             
         st.markdown("---")
-        with st.expander("➕ Click to Add Temporary Employee Account"):
+        
+        # LOCAL QR CODE GENERATOR (১০০% গ্যারান্টিড আসবেই)
+        with st.expander("🖨 Showroom Official QR Code (প্রিন্ট করার জন্য ক্লিক করুন)"):
+            st.write("নিচের কিউআর কোডটি ডাউনলোড বা বড় করে প্রিন্ট করে দেওয়ালে লাগিয়ে দিন।")
+            qr = qrcode.QRCode(version=1, box_size=10, border=4)
+            qr.add_data(SHOWROOM_QR_SECRET)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            st.image(buf.getvalue(), caption="JK Suzuki Official QR Code", width=300)
+            
+        st.markdown("---")
+        with st.expander("➕ Click to Add New Employee Account (Temporary)"):
             new_id = st.text_input("New Employee ID:").strip()
             new_name = st.text_input("New Employee Full Name:").strip()
             new_pass = st.text_input("Set Password:").strip()
