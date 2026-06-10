@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import pytz
 import io
@@ -16,14 +16,20 @@ ATT_FILE = "attendance_database.xlsx"
 # Initializing permanent local databases
 def init_databases():
     fixed_accounts = {
-        "admin": {"Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0, "Shift_Time": "09:00 AM"},
-        "101": {"Name": "Amit Kumar", "Password": "password101", "Role": "Employee", "Base_Salary": 15000, "Shift_Time": "09:00 AM"},
-        "102": {"Name": "Rahul Singh", "Password": "password102", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "09:30 AM"},
-        "114": {"Name": "Jahir", "Password": "jahir", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "10:00 AM"}
+        "admin": {"Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0, "Shift_Time": "09:00 AM", "Joining_Date": "2026-01-01"},
+        "101": {"Name": "Amit Kumar", "Password": "password101", "Role": "Employee", "Base_Salary": 15000, "Shift_Time": "09:00 AM", "Joining_Date": "2026-01-01"},
+        "102": {"Name": "Rahul Singh", "Password": "password102", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "09:30 AM", "Joining_Date": "2026-01-05"},
+        "114": {"Name": "Jahir", "Password": "jahir", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "10:00 AM", "Joining_Date": "2026-01-10"}
     }
     if not os.path.exists(DB_FILE):
-        rows = [{"ID": str(k), "Name": v["Name"], "Password": str(v["Password"]), "Role": v["Role"], "Base_Salary": float(v["Base_Salary"]), "Shift_Time": v["Shift_Time"]} for k, v in fixed_accounts.items()]
+        rows = [{"ID": str(k), "Name": v["Name"], "Password": str(v["Password"]), "Role": v["Role"], "Base_Salary": float(v["Base_Salary"]), "Shift_Time": v["Shift_Time"], "Joining_Date": v["Joining_Date"]} for k, v in fixed_accounts.items()]
         pd.DataFrame(rows).to_excel(DB_FILE, index=False)
+    else:
+        # Guarantee Joining_Date column exists in existing file
+        df = pd.read_excel(DB_FILE)
+        if "Joining_Date" not in df.columns:
+            df["Joining_Date"] = "2026-01-01"
+            df.to_excel(DB_FILE, index=False)
     
     if not os.path.exists(ATT_FILE):
         pd.DataFrame(columns=["Date", "ID", "Name", "Entry Time", "Exit Time", "Status", "Is_Late"]).to_excel(ATT_FILE, index=False)
@@ -35,22 +41,39 @@ def get_all_users():
     df = pd.read_excel(DB_FILE)
     if "Shift_Time" not in df.columns:
         df["Shift_Time"] = "09:00 AM"
-    return {str(row["ID"]).strip(): {"Name": row["Name"], "Password": str(row["Password"]).strip(), "Role": row["Role"], "Base_Salary": float(row["Base_Salary"]), "Shift_Time": str(row["Shift_Time"])} for _, row in df.iterrows()}
+    if "Joining_Date" not in df.columns:
+        df["Joining_Date"] = "2026-01-01"
+    return {
+        str(row["ID"]).strip(): {
+            "Name": row["Name"], 
+            "Password": str(row["Password"]).strip(), 
+            "Role": row["Role"], 
+            "Base_Salary": float(row["Base_Salary"]), 
+            "Shift_Time": str(row["Shift_Time"]),
+            "Joining_Date": str(row["Joining_Date"])
+        } for _, row in df.iterrows()
+    }
 
-def add_user_to_db(uid, name, password, base_salary, shift_time):
+def add_user_to_db(uid, name, password, base_salary, shift_time, joining_date):
     df = pd.read_excel(DB_FILE)
-    new_row = pd.DataFrame([{"ID": str(uid).strip(), "Name": name, "Password": str(password).strip(), "Role": "Employee", "Base_Salary": float(base_salary), "Shift_Time": shift_time}])
+    new_row = pd.DataFrame([{
+        "ID": str(uid).strip(), 
+        "Name": name, 
+        "Password": str(password).strip(), 
+        "Role": "Employee", 
+        "Base_Salary": float(base_salary), 
+        "Shift_Time": shift_time,
+        "Joining_Date": str(joining_date)
+    }])
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_excel(DB_FILE, index=False)
 
 # Permanent Delete Function for Employee and Attendance
 def delete_user_from_db(emp_id):
-    # 1. Remove from Employee Profiles
     df_db = pd.read_excel(DB_FILE)
     df_db_filtered = df_db[df_db["ID"].astype(str) != str(emp_id)]
     df_db_filtered.to_excel(DB_FILE, index=False)
     
-    # 2. Remove from Attendance Logs
     df_att = pd.read_excel(ATT_FILE)
     df_att_filtered = df_att[df_att["ID"].astype(str) != str(emp_id)]
     df_att_filtered.to_excel(ATT_FILE, index=False)
@@ -112,6 +135,15 @@ def calculate_salary_report(emp_id, base_salary):
     
     return present_days, allowed_holidays, absent_days, late_days, late_penalty_cost, net_payable, total_deduction
 
+# Helper to calculate next salary due date (1 month after joining date)
+def get_next_salary_date(joining_date_str):
+    try:
+        j_date = datetime.strptime(joining_date_str, "%Y-%m-%d")
+        next_date = j_date + timedelta(days=30)
+        return next_date.strftime("%d %b, %Y")
+    except:
+        return "Not Set"
+
 # App Config
 st.set_page_config(page_title="JK Suzuki Pro System", layout="wide")
 st.title("🏍️ JK Suzuki Attendance, Shift & Salary Portal")
@@ -146,6 +178,7 @@ else:
     st.sidebar.write(f"**ID:** {current_uid} | **Role:** {user_info['Role']}")
     if user_info['Role'] == "Employee":
         st.sidebar.write(f"⏰ **Your Shift Time:** {user_info['Shift_Time']}")
+        st.sidebar.write(f"📅 **Joining Date:** {user_info['Joining_Date']}")
         
     if st.sidebar.button("Logout", type="secondary"):
         st.session_state.logged_in = False
@@ -154,8 +187,13 @@ else:
     # EMPLOYEE VIEW
     if user_info["Role"] == "Employee":
         p_days, h_days, a_days, l_days, l_fine, p_sal, ded = calculate_salary_report(current_uid, user_info['Base_Salary'])
+        next_pay_day = get_next_salary_date(user_info['Joining_Date'])
         
         st.subheader("📊 Your Live Salary & Attendance Sheet")
+        
+        # Displaying dates beautifully to the employee
+        st.warning(f"🗓️ **Your Joining Date:** {user_info['Joining_Date']} | 💰 **Next Salary Due Date:** {next_pay_day}")
+        
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             st.metric(label="Base Salary", value=f"₹{user_info['Base_Salary']}")
@@ -214,6 +252,9 @@ else:
             n_pass = st.text_input("Set Password:").strip()
             n_sal = st.number_input("Monthly Base Salary (₹):", min_value=0, value=12000)
             
+            # Joining date input option for Admin
+            n_jdate = st.date_input("Select Employee Joining Date:", value=datetime.now(KOLKATA_TZ).date())
+            
             shift_h = st.selectbox("Shift Hour:", [f"{i:02d}" for i in range(1, 13)], index=8)
             shift_m = st.selectbox("Shift Minute:", [f"{i:02d}" for i in range(0, 60, 5)], index=0)
             shift_p = st.selectbox("AM/PM:", ["AM", "PM"], index=0)
@@ -223,23 +264,26 @@ else:
             if st.button("Create Permanent Account", type="primary"):
                 if n_id in all_users:
                     st.error("❌ ID already exists!")
-                elif n_id=="" or n_name=="" or n_pass=="":
+                elif n_id==="" or n_name==="" or n_pass==="":
                     st.error("❌ Fill all fields!")
                 else:
-                    add_user_to_db(n_id, n_name, n_pass, n_sal, final_shift_time)
-                    st.success(f"✅ Employee {n_name} added permanently!")
+                    add_user_to_db(n_id, n_name, n_pass, n_sal, final_shift_time, str(n_jdate))
+                    st.success(f"✅ Employee {n_name} added permanently with Joining Date: {n_jdate}!")
                     st.rerun()
                     
         st.markdown("---")
         
-        # Gathering report rows
+        # Gathering report rows with joining and due dates
         report_rows = []
         for uid, udata in all_users.items():
             if udata["Role"] == "Employee":
                 p_days, h_days, a_days, l_days, l_fine, p_sal, ded = calculate_salary_report(uid, udata['Base_Salary'])
+                next_pay = get_next_salary_date(udata.get('Joining_Date', '2026-01-01'))
                 report_rows.append({
                     "ID": uid,
                     "Name": udata["Name"],
+                    "Joining Date": udata.get('Joining_Date', '2026-01-01'),
+                    "Salary Due Date": next_pay,
                     "Target Time": udata["Shift_Time"],
                     "Base Salary (₹)": udata["Base_Salary"],
                     "Present Days": p_days,
@@ -263,6 +307,7 @@ else:
                 for _, row in filtered_df.iterrows():
                     emp_id_str = str(row["ID"])
                     with st.container():
+                        st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 💰 **Salary Due Date:** <span style='color:#ff4b4b; font-weight:bold;'>{row['Salary Due Date']}</span>", unsafe_allow_html=True)
                         c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7 = st.columns([1, 2, 1.2, 1.2, 1.2, 1.2, 3])
                         with c_s1:
                             st.write(f"**ID:** {emp_id_str}")
@@ -300,6 +345,7 @@ else:
             for _, row in df_report.iterrows():
                 emp_id_str = str(row["ID"])
                 with st.container():
+                    st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** <span style='color:#00ff00; font-weight:bold;'>{row['Salary Due Date']}</span>", unsafe_allow_html=True)
                     col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7 = st.columns([1, 2, 1.2, 1.2, 1.2, 1.2, 3])
                     with col_emp1:
                         st.write(f"**ID:** {emp_id_str}")
