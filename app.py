@@ -16,38 +16,52 @@ ATT_FILE = "attendance_database.xlsx"
 # Initializing permanent local databases
 def init_databases():
     fixed_accounts = {
-        "admin": {"Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0},
-        "101": {"Name": "Amit Kumar", "Password": "password101", "Role": "Employee", "Base_Salary": 15000},
-        "102": {"Name": "Rahul Singh", "Password": "password102", "Role": "Employee", "Base_Salary": 12000},
-        "114": {"Name": "Jahir", "Password": "jahir", "Role": "Employee", "Base_Salary": 12000}
+        "admin": {"Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0, "Shift_Time": "09:00 AM"},
+        "101": {"Name": "Amit Kumar", "Password": "password101", "Role": "Employee", "Base_Salary": 15000, "Shift_Time": "09:00 AM"},
+        "102": {"Name": "Rahul Singh", "Password": "password102", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "09:30 AM"},
+        "114": {"Name": "Jahir", "Password": "jahir", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "10:00 AM"}
     }
     if not os.path.exists(DB_FILE):
-        rows = [{"ID": str(k), "Name": v["Name"], "Password": str(v["Password"]), "Role": v["Role"], "Base_Salary": float(v["Base_Salary"])} for k, v in fixed_accounts.items()]
+        rows = [{"ID": str(k), "Name": v["Name"], "Password": str(v["Password"]), "Role": v["Role"], "Base_Salary": float(v["Base_Salary"]), "Shift_Time": v["Shift_Time"]} for k, v in fixed_accounts.items()]
         pd.DataFrame(rows).to_excel(DB_FILE, index=False)
     
     if not os.path.exists(ATT_FILE):
-        pd.DataFrame(columns=["Date", "ID", "Name", "Entry Time", "Exit Time", "Status"]).to_excel(ATT_FILE, index=False)
+        pd.DataFrame(columns=["Date", "ID", "Name", "Entry Time", "Exit Time", "Status", "Is_Late"]).to_excel(ATT_FILE, index=False)
 
 init_databases()
 
-# Helper functions to read/write files (Fixes memory wipe on refresh)
+# Helper functions
 def get_all_users():
     df = pd.read_excel(DB_FILE)
-    return {str(row["ID"]).strip(): {"Name": row["Name"], "Password": str(row["Password"]).strip(), "Role": row["Role"], "Base_Salary": float(row["Base_Salary"])} for _, row in df.iterrows()}
+    if "Shift_Time" not in df.columns:
+        df["Shift_Time"] = "09:00 AM"
+    return {str(row["ID"]).strip(): {"Name": row["Name"], "Password": str(row["Password"]).strip(), "Role": row["Role"], "Base_Salary": float(row["Base_Salary"]), "Shift_Time": str(row["Shift_Time"])} for _, row in df.iterrows()}
 
-def add_user_to_db(uid, name, password, base_salary):
+def add_user_to_db(uid, name, password, base_salary, shift_time):
     df = pd.read_excel(DB_FILE)
-    new_row = pd.DataFrame([{"ID": str(uid).strip(), "Name": name, "Password": str(password).strip(), "Role": "Employee", "Base_Salary": float(base_salary)}])
+    new_row = pd.DataFrame([{"ID": str(uid).strip(), "Name": name, "Password": str(password).strip(), "Role": "Employee", "Base_Salary": float(base_salary), "Shift_Time": shift_time}])
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_excel(DB_FILE, index=False)
 
 def get_attendance():
-    return pd.read_excel(ATT_FILE)
+    df = pd.read_excel(ATT_FILE)
+    if "Is_Late" not in df.columns:
+        df["Is_Late"] = "No"
+    return df
 
 def save_attendance(df):
     df.to_excel(ATT_FILE, index=False)
 
-# Salary Calculation (4 Allowed Weekly Paid Holidays)
+# Time checker logic for Late count
+def check_if_late(entry_str, shift_str):
+    try:
+        t_entry = datetime.strptime(entry_str, "%I:%M %p").time()
+        t_shift = datetime.strptime(shift_str, "%I:%M %p").time()
+        return "Yes" if t_entry > t_shift else "No"
+    except:
+        return "No"
+
+# Salary & Fine Logic (Managed 4 Holidays, 5 Days Late = Half Day Fine, 10 Days Late = 1 Day Fine)
 def calculate_salary_report(emp_id, base_salary):
     total_days = 30
     allowed_holidays = 4
@@ -56,21 +70,34 @@ def calculate_salary_report(emp_id, base_salary):
     if not df_att.empty:
         emp_logs = df_att[df_att["ID"].astype(str) == str(emp_id)]
         present_days = emp_logs["Date"].nunique()
+        late_days = len(emp_logs[emp_logs["Is_Late"] == "Yes"])
     else:
         present_days = 0
+        late_days = 0
         
     paid_days = min(present_days + allowed_holidays, total_days)
     absent_days = max(0, total_days - paid_days)
     
     per_day_salary = base_salary / total_days
-    net_payable = round(paid_days * per_day_salary, 2)
-    deduction = round(absent_days * per_day_salary, 2)
     
-    return present_days, allowed_holidays, absent_days, net_payable, deduction
+    # Late Penalty Rule Calculator
+    late_fine_days = 0.0
+    if late_days >= 10:
+        late_fine_days = 1.0
+    elif late_days >= 5:
+        late_fine_days = 0.5
+        
+    net_payable = round((paid_days - late_fine_days) * per_day_salary, 2)
+    net_payable = max(0.0, net_payable)
+    
+    total_deduction = round((absent_days + late_fine_days) * per_day_salary, 2)
+    late_penalty_cost = round(late_fine_days * per_day_salary, 2)
+    
+    return present_days, allowed_holidays, absent_days, late_days, late_penalty_cost, net_payable, total_deduction
 
-# App Configuration
-st.set_page_config(page_title="JK Suzuki Systems", layout="wide")
-st.title("🏍️ JK Suzuki Attendance & Salary Portal")
+# App Config
+st.set_page_config(page_title="JK Suzuki Pro System", layout="wide")
+st.title("🏍️ JK Suzuki Attendance, Shift & Salary Portal")
 st.markdown("---")
 
 if 'logged_in' not in st.session_state:
@@ -100,24 +127,30 @@ else:
     
     st.sidebar.subheader(f"👤 {user_info['Name']}")
     st.sidebar.write(f"**ID:** {current_uid} | **Role:** {user_info['Role']}")
+    if user_info['Role'] == "Employee":
+        st.sidebar.write(f"⏰ **Your Shift Time:** {user_info['Shift_Time']}")
+        
     if st.sidebar.button("Logout", type="secondary"):
         st.session_state.logged_in = False
         st.rerun()
         
-    # EMPLOYEE INTERFACE
+    # EMPLOYEE VIEW
     if user_info["Role"] == "Employee":
-        p_days, h_days, a_days, p_sal, ded = calculate_salary_report(current_uid, user_info['Base_Salary'])
+        p_days, h_days, a_days, l_days, l_fine, p_sal, ded = calculate_salary_report(current_uid, user_info['Base_Salary'])
         
         st.subheader("📊 Your Live Salary & Attendance Sheet")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
             st.metric(label="Base Salary", value=f"₹{user_info['Base_Salary']}")
             st.write(f"💼 **Days Present:** {p_days}")
         with c2:
-            st.metric(label="Net Payable (Salary)", value=f"₹{p_sal}")
-            st.write(f"🌴 **Paid Leaves:** {h_days} Days (Given)")
+            st.metric(label="Net Payable Salary", value=f"₹{p_sal}")
+            st.write(f"🌴 **Paid Leaves:** {h_days} Days")
         with c3:
-            st.metric(label="Deducted (Absent)", value=f"-₹{ded}")
+            st.metric(label="Late Fine Deducted", value=f"₹{l_fine}")
+            st.write(f"⚠️ **Total Late Days:** {l_days} Days")
+        with c4:
+            st.metric(label="Total Deducted (Absent+Late)", value=f"₹{ded}")
             st.write(f"❌ **Unpaid Absents:** {a_days}")
             
         st.markdown("---")
@@ -132,12 +165,13 @@ else:
         today_entry = df_att[(df_att["Date"] == c_date) & (df_att["ID"].astype(str) == str(current_uid))]
         
         if today_entry.empty:
-            st.warning("📋 আজকের হাজিরা দেওয়া হয়নি। শোরুমের QR Code স্ক্যান করুন।")
+            st.warning("📋 আপনার আজকের হাজিরা দেওয়া হয়নি। শোরুমের QR Code স্ক্যান করুন।")
             val = qrcode_scanner(key='entry_scan')
             if val == SHOWROOM_QR_SECRET:
-                new_row = pd.DataFrame([{"Date": c_date, "ID": str(current_uid), "Name": user_info['Name'], "Entry Time": c_time, "Exit Time": "Not Out Yet", "Status": "Present"}])
+                is_late_status = check_if_late(c_time, user_info['Shift_Time'])
+                new_row = pd.DataFrame([{"Date": c_date, "ID": str(current_uid), "Name": user_info['Name'], "Entry Time": c_time, "Exit Time": "Not Out Yet", "Status": "Present", "Is_Late": is_late_status}])
                 save_attendance(pd.concat([df_att, new_row], ignore_index=True))
-                st.success("✅ ENTRY Recorded!")
+                st.success(f"✅ ENTRY Recorded! Late Status: {is_late_status}")
                 st.rerun()
         elif today_entry.iloc[0]["Exit Time"] == "Not Out Yet":
             st.info("⚠️ ছুটির সময় বিদায় নেওয়ার জন্য আবার QR Code স্ক্যান করুন।")
@@ -153,15 +187,23 @@ else:
         st.markdown("---")
         st.dataframe(df_att[df_att["ID"].astype(str) == str(current_uid)], use_container_width=True)
 
-    # ADMIN INTERFACE
+    # ADMIN VIEW
     elif user_info["Role"] == "Admin":
         st.subheader("👑 Owner Control Panel")
         
-        with st.expander("➕ Add New Employee Account (নতুন কর্মচারী যোগ করুন)"):
+        # Add New Employee Account Panel with Custom Shift Setup
+        with st.expander("➕ Add New Employee & Shift Time (নতুন কর্মচারী ও টাইম সেট করুন)"):
             n_id = st.text_input("New Employee ID No:").strip()
             n_name = st.text_input("Employee Full Name:").strip()
             n_pass = st.text_input("Set Password:").strip()
             n_sal = st.number_input("Monthly Base Salary (₹):", min_value=0, value=12000)
+            
+            # Alada shift time set korar option
+            shift_h = st.selectbox("Shift Hour:", [f"{i:02d}" for i in range(1, 13)], index=8)
+            shift_m = st.selectbox("Shift Minute:", [f"{i:02d}" for i in range(0, 60, 5)], index=0)
+            shift_p = st.selectbox("AM/PM:", ["AM", "PM"], index=0)
+            final_shift_time = f"{shift_h}:{shift_m} {shift_p}"
+            st.write(f"Selected Entry Cutoff: **{final_shift_time}**")
             
             if st.button("Create Permanent Account", type="primary"):
                 if n_id in all_users:
@@ -169,21 +211,46 @@ else:
                 elif n_id=="" or n_name=="" or n_pass=="":
                     st.error("❌ Fill all fields!")
                 else:
-                    add_user_to_db(n_id, n_name, n_pass, n_sal)
-                    st.success(f"✅ Account {n_id} created permanently in Excel Database!")
+                    add_user_to_db(n_id, n_name, n_pass, n_sal, final_shift_time)
+                    st.success(f"✅ Employee {n_name} added permanently with Entry Time: {final_shift_time}!")
                     st.rerun()
                     
+        st.markdown("---")
+        
+        # LIVE SYNC REPORT: Admin will see exactly what employee sees
+        st.subheader("📊 Employees Monthly Live Salary Sheet (Admin Overview)")
+        report_rows = []
+        for uid, udata in all_users.items():
+            if udata["Role"] == "Employee":
+                p_days, h_days, a_days, l_days, l_fine, p_sal, ded = calculate_salary_report(uid, udata['Base_Salary'])
+                report_rows.append({
+                    "Employee ID": uid,
+                    "Name": udata["Name"],
+                    "Target Time": udata["Shift_Time"],
+                    "Base Salary (₹)": udata["Base_Salary"],
+                    "Present Days": p_days,
+                    "Late Days": l_days,
+                    "Late Fine (₹)": l_fine,
+                    "Net Payable Salary (₹)": p_sal,
+                    "Total Deductions (₹)": ded
+                })
+        
+        if report_rows:
+            st.dataframe(pd.DataFrame(report_rows), use_container_width=True)
+        else:
+            st.info("No employee accounts registered yet.")
+
         st.markdown("---")
         df_att = get_attendance()
         if not df_att.empty:
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine='openpyxl') as writer:
                 df_att.to_excel(writer, index=False, sheet_name='Sheet1')
-            st.download_button(label="📥 Download Attendance Sheets (.xlsx)", data=buf.getvalue(), file_name="JK_Suzuki_Attendance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(label="📥 Download Master Attendance Sheets (.xlsx)", data=buf.getvalue(), file_name="JK_Suzuki_Master_Attendance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         
         with st.expander("🖨 Showroom Official QR Code"):
             st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={SHOWROOM_QR_SECRET}", width=300)
             
         st.markdown("---")
-        st.subheader("📋 Overall Attendance Data")
+        st.subheader("📋 Overall Master Attendance Logs (All Database)")
         st.dataframe(df_att, use_container_width=True)
