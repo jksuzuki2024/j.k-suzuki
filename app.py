@@ -52,6 +52,13 @@ def get_attendance():
 def save_attendance(df):
     df.to_excel(ATT_FILE, index=False)
 
+# Refresh logic to clear attendance for a specific employee
+def clear_employee_attendance(emp_id):
+    df_att = get_attendance()
+    # Keep everyone else's data, drop this employee's logs to start fresh month
+    df_filtered = df_att[df_att["ID"].astype(str) != str(emp_id)]
+    save_attendance(df_filtered)
+
 # Time checker logic for Late count
 def check_if_late(entry_str, shift_str):
     try:
@@ -61,7 +68,7 @@ def check_if_late(entry_str, shift_str):
     except:
         return "No"
 
-# Salary & Fine Logic (Managed 4 Holidays, 5 Days Late = Half Day Fine, 10 Days Late = 1 Day Fine)
+# Salary & Fine Logic
 def calculate_salary_report(emp_id, base_salary):
     total_days = 30
     allowed_holidays = 4
@@ -80,7 +87,6 @@ def calculate_salary_report(emp_id, base_salary):
     
     per_day_salary = base_salary / total_days
     
-    # Late Penalty Rule Calculator
     late_fine_days = 0.0
     if late_days >= 10:
         late_fine_days = 1.0
@@ -165,7 +171,7 @@ else:
         today_entry = df_att[(df_att["Date"] == c_date) & (df_att["ID"].astype(str) == str(current_uid))]
         
         if today_entry.empty:
-            st.warning("📋 আপনার আজকের হাজিরা দেওয়া হয়নি। শোরুমের QR Code স্ক্যান করুন।")
+            st.warning("📋 আজকের হাজিরা দেওয়া হয়নি। শোরুমের QR Code স্ক্যান করুন।")
             val = qrcode_scanner(key='entry_scan')
             if val == SHOWROOM_QR_SECRET:
                 is_late_status = check_if_late(c_time, user_info['Shift_Time'])
@@ -191,14 +197,12 @@ else:
     elif user_info["Role"] == "Admin":
         st.subheader("👑 Owner Control Panel")
         
-        # Add New Employee Account Panel with Custom Shift Setup
         with st.expander("➕ Add New Employee & Shift Time (নতুন কর্মচারী ও টাইম সেট করুন)"):
             n_id = st.text_input("New Employee ID No:").strip()
             n_name = st.text_input("Employee Full Name:").strip()
             n_pass = st.text_input("Set Password:").strip()
             n_sal = st.number_input("Monthly Base Salary (₹):", min_value=0, value=12000)
             
-            # Alada shift time set korar option
             shift_h = st.selectbox("Shift Hour:", [f"{i:02d}" for i in range(1, 13)], index=8)
             shift_m = st.selectbox("Shift Minute:", [f"{i:02d}" for i in range(0, 60, 5)], index=0)
             shift_p = st.selectbox("AM/PM:", ["AM", "PM"], index=0)
@@ -212,33 +216,41 @@ else:
                     st.error("❌ Fill all fields!")
                 else:
                     add_user_to_db(n_id, n_name, n_pass, n_sal, final_shift_time)
-                    st.success(f"✅ Employee {n_name} added permanently with Entry Time: {final_shift_time}!")
+                    st.success(f"✅ Employee {n_name} added permanently!")
                     st.rerun()
                     
         st.markdown("---")
         
-        # LIVE SYNC REPORT: Admin will see exactly what employee sees
+        # LIVE SYNC REPORT WITH REFRESH BUTTONS
         st.subheader("📊 Employees Monthly Live Salary Sheet (Admin Overview)")
-        report_rows = []
+        
+        # Loop over employees to generate table rows dynamically with individual refresh buttons
         for uid, udata in all_users.items():
             if udata["Role"] == "Employee":
                 p_days, h_days, a_days, l_days, l_fine, p_sal, ded = calculate_salary_report(uid, udata['Base_Salary'])
-                report_rows.append({
-                    "Employee ID": uid,
-                    "Name": udata["Name"],
-                    "Target Time": udata["Shift_Time"],
-                    "Base Salary (₹)": udata["Base_Salary"],
-                    "Present Days": p_days,
-                    "Late Days": l_days,
-                    "Late Fine (₹)": l_fine,
-                    "Net Payable Salary (₹)": p_sal,
-                    "Total Deductions (₹)": ded
-                })
-        
-        if report_rows:
-            st.dataframe(pd.DataFrame(report_rows), use_container_width=True)
-        else:
-            st.info("No employee accounts registered yet.")
+                
+                # Visual container for each employee row
+                with st.container():
+                    col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7 = st.columns([1, 2, 1.5, 1.5, 1.5, 1.5, 2])
+                    with col_emp1:
+                        st.write(f"**ID:** {uid}")
+                    with col_emp2:
+                        st.write(f"**Name:** {udata['Name']}")
+                    with col_emp3:
+                        st.write(f"💼 Present: **{p_days}**")
+                    with col_emp4:
+                        st.write(f"⚠️ Late: **{l_days}**")
+                    with col_emp5:
+                        st.write(f"📉 Fine: **₹{l_fine}**")
+                    with col_emp6:
+                        st.write(f"💰 Net Pay: **₹{p_sal}**")
+                    with col_emp7:
+                        # Individual Refresh Button for Admin
+                        if st.button(f"🔄 Paid & Refresh", key=f"ref_{uid}", help=f"Click to clear month logs for {udata['Name']}", type="secondary"):
+                            clear_employee_attendance(uid)
+                            st.success(f"Reset done for {udata['Name']}!")
+                            st.rerun()
+                st.markdown("<hr style='margin:0.5em 0px; border-color:rgba(49, 51, 63, 0.2);'>", unsafe_allow_allowed=True)
 
         st.markdown("---")
         df_att = get_attendance()
