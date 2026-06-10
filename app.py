@@ -43,6 +43,18 @@ def add_user_to_db(uid, name, password, base_salary, shift_time):
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_excel(DB_FILE, index=False)
 
+# NEW FEATURE: Permanent Delete Function for Employee and Attendance
+def delete_user_from_db(emp_id):
+    # 1. Remove from Employee Profiles
+    df_db = pd.read_excel(DB_FILE)
+    df_db_filtered = df_db[df_db["ID"].astype(str) != str(emp_id)]
+    df_db_filtered.to_excel(DB_FILE, index=False)
+    
+    # 2. Remove from Attendance Logs
+    df_att = pd.read_excel(ATT_FILE)
+    df_att_filtered = df_att[df_att["ID"].astype(str) != str(emp_id)]
+    df_att_filtered.to_excel(ATT_FILE, index=False)
+
 def get_attendance():
     df = pd.read_excel(ATT_FILE)
     if "Is_Late" not in df.columns:
@@ -111,7 +123,6 @@ if 'logged_in' not in st.session_state:
 
 all_users = get_all_users()
 
-# FIXED: Login section logic separated completely to prevent UI breaking
 if not st.session_state.logged_in:
     st.subheader("🔒 User Login")
     col1, col2 = st.columns(2)
@@ -221,7 +232,7 @@ else:
                     
         st.markdown("---")
         
-        # Gathering all data rows for report
+        # Gathering report rows
         report_rows = []
         for uid, udata in all_users.items():
             if udata["Role"] == "Employee":
@@ -252,7 +263,7 @@ else:
                 for _, row in filtered_df.iterrows():
                     emp_id_str = str(row["ID"])
                     with st.container():
-                        c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7 = st.columns([1, 2, 1.5, 1.5, 1.5, 1.5, 2])
+                        c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7 = st.columns([1, 2, 1.2, 1.2, 1.2, 1.2, 3])
                         with c_s1:
                             st.write(f"**ID:** {emp_id_str}")
                         with c_s2:
@@ -266,10 +277,17 @@ else:
                         with c_s6:
                             st.write(f"💰 Net Pay: **₹{row['Net Payable Salary (₹)']}**")
                         with c_s7:
-                            if st.button(f"🔄 Paid & Refresh", key=f"src_ref_{emp_id_str}", type="primary"):
-                                clear_employee_attendance(emp_id_str)
-                                st.success(f"Reset done for {row['Name']}!")
-                                st.rerun()
+                            c_btn1, c_btn2 = st.columns(2)
+                            with c_btn1:
+                                if st.button(f"🔄 Paid & Refresh", key=f"src_ref_{emp_id_str}", type="primary"):
+                                    clear_employee_attendance(emp_id_str)
+                                    st.success(f"Reset done for {row['Name']}!")
+                                    st.rerun()
+                            with c_btn2:
+                                if st.button(f"🗑️ Delete Account", key=f"src_del_{emp_id_str}", type="secondary", help="Permanently delete from showroom records"):
+                                    delete_user_from_db(emp_id_str)
+                                    st.warning(f"Deleted {row['Name']} permanently!")
+                                    st.rerun()
                     st.markdown("<hr style='margin:0.5em 0px; border-color:#ff4b4b;'>", unsafe_allow_html=True)
             else:
                 st.error("❌ No Employee found with that ID or Name!")
@@ -282,7 +300,7 @@ else:
             for _, row in df_report.iterrows():
                 emp_id_str = str(row["ID"])
                 with st.container():
-                    col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7 = st.columns([1, 2, 1.5, 1.5, 1.5, 1.5, 2])
+                    col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7 = st.columns([1, 2, 1.2, 1.2, 1.2, 1.2, 3])
                     with col_emp1:
                         st.write(f"**ID:** {emp_id_str}")
                     with col_emp2:
@@ -296,10 +314,17 @@ else:
                     with col_emp6:
                         st.write(f"💰 Net Pay: **₹{row['Net Payable Salary (₹)']}**")
                     with col_emp7:
-                        if st.button(f"🔄 Paid & Refresh", key=f"main_ref_{emp_id_str}", type="secondary"):
-                            clear_employee_attendance(emp_id_str)
-                            st.success(f"Reset done for {row['Name']}!")
-                            st.rerun()
+                        c_mbtn1, c_mbtn2 = st.columns(2)
+                        with c_mbtn1:
+                            if st.button(f"🔄 Paid & Refresh", key=f"main_ref_{emp_id_str}", type="secondary"):
+                                clear_employee_attendance(emp_id_str)
+                                st.success(f"Reset done for {row['Name']}!")
+                                st.rerun()
+                        with c_mbtn2:
+                            if st.button(f"🗑️ Delete Account", key=f"main_del_{emp_id_str}", type="secondary"):
+                                delete_user_from_db(emp_id_str)
+                                st.warning(f"Deleted {row['Name']} permanently!")
+                                        st.rerun()
                 st.markdown("<hr style='margin:0.5em 0px;'>", unsafe_allow_html=True)
         else:
             st.info("No employee accounts registered yet.")
