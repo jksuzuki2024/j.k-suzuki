@@ -43,7 +43,7 @@ def add_user_to_db(uid, name, password, base_salary, shift_time):
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_excel(DB_FILE, index=False)
 
-# NEW FEATURE: Permanent Delete Function for Employee and Attendance
+# Permanent Delete Function for Employee and Attendance
 def delete_user_from_db(emp_id):
     # 1. Remove from Employee Profiles
     df_db = pd.read_excel(DB_FILE)
@@ -284,7 +284,7 @@ else:
                                     st.success(f"Reset done for {row['Name']}!")
                                     st.rerun()
                             with c_btn2:
-                                if st.button(f"🗑️ Delete Account", key=f"src_del_{emp_id_str}", type="secondary", help="Permanently delete from showroom records"):
+                                if st.button(f"🗑️ Delete Account", key=f"src_del_{emp_id_str}", type="secondary"):
                                     delete_user_from_db(emp_id_str)
                                     st.warning(f"Deleted {row['Name']} permanently!")
                                     st.rerun()
@@ -314,17 +314,17 @@ else:
                     with col_emp6:
                         st.write(f"💰 Net Pay: **₹{row['Net Payable Salary (₹)']}**")
                     with col_emp7:
-                        c_mbtn1, c_mbtn2 = st.columns(2)
-                        with c_mbtn1:
+                        col_mbtn1, col_mbtn2 = st.columns(2)
+                        with col_mbtn1:
                             if st.button(f"🔄 Paid & Refresh", key=f"main_ref_{emp_id_str}", type="secondary"):
                                 clear_employee_attendance(emp_id_str)
                                 st.success(f"Reset done for {row['Name']}!")
                                 st.rerun()
-                        with c_mbtn2:
+                        with col_mbtn2:
                             if st.button(f"🗑️ Delete Account", key=f"main_del_{emp_id_str}", type="secondary"):
                                 delete_user_from_db(emp_id_str)
                                 st.warning(f"Deleted {row['Name']} permanently!")
-                                        st.rerun()
+                                st.rerun()
                 st.markdown("<hr style='margin:0.5em 0px;'>", unsafe_allow_html=True)
         else:
             st.info("No employee accounts registered yet.")
