@@ -1,19 +1,14 @@
 import streamlit as st
 import pandas as pd
-import os
 from datetime import datetime
 import pytz
 import io
-import qrcode
-from PIL import Image
 
 # Timezone Kolkata
 KOLKATA_TZ = pytz.timezone("Asia/Kolkata")
-
-# Fixed QR Secret
 SHOWROOM_QR_SECRET = "JK_SUZUKI_SHOWROOM_OFFICIAL_ATTENDANCE_2026"
 
-# Permament ID-Password Backup (Apnar shob ID ekhane permanent safe thakbe)
+# এই আইডি-পাসওয়ার্ডগুলো কোডের ভেতরেই আজীবনের জন্য ফিক্সড করে দেওয়া হলো
 FIXED_ACCOUNTS = {
     "admin": {"Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0},
     "101": {"Name": "Amit Kumar", "Password": "password101", "Role": "Employee", "Base_Salary": 15000},
@@ -29,19 +24,6 @@ if "attendance_records" not in st.session_state:
 
 att_df = pd.DataFrame(st.session_state.attendance_records) if st.session_state.attendance_records else pd.DataFrame(columns=["Date", "ID", "Name", "Entry Time", "Exit Time", "Status"])
 
-def calculate_emp_salary(emp_id, base_salary, att_dataframe):
-    total_days = 30 
-    allowed_holidays = 4 
-    if not att_dataframe.empty and "ID" in att_dataframe.columns:
-        emp_logs = att_dataframe[att_dataframe["ID"] == str(emp_id)]
-        present_days = emp_logs["Date"].nunique() if not emp_logs.empty else 0
-    else:
-        present_days = 0
-    paid_days = min(present_days + allowed_holidays, total_days)
-    absent_days = max(0, total_days - paid_days)
-    per_day_salary = base_salary / total_days
-    return present_days, allowed_holidays, absent_days, round(paid_days * per_day_salary, 2), round(absent_days * per_day_salary, 2)
-
 st.set_page_config(page_title="JK Suzuki Management", layout="wide")
 st.title("🏍️ JK Suzuki Attendance & Salary System")
 st.markdown("---")
@@ -50,7 +32,6 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_id = ""
 
-# Secure Login Flow
 if not st.session_state.logged_in:
     st.subheader("🔒 User Login")
     col1, col2 = st.columns(2)
@@ -76,20 +57,10 @@ else:
     st.sidebar.write(f"**ID No:** {current_uid}")
     st.sidebar.write(f"**Role:** {user_info['Role']}")
     
-    if user_info['Role'] == "Employee":
-        p_days, h_days, a_days, p_sal, ded = calculate_emp_salary(current_uid, user_info['Base_Salary'], att_df)
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("💰 Live Salary Report")
-        st.sidebar.write(f"**Base Salary:** ₹{user_info['Base_Salary']}")
-        st.sidebar.write(f"**Present Today:** {p_days} Days")
-        st.sidebar.success(f"**Current Payable:** ₹{p_sal}")
-        if ded > 0: st.sidebar.error(f"**Deduction:** -₹{ded}")
-
     if st.sidebar.button("Logout", type="secondary"):
         st.session_state.logged_in = False
         st.rerun()
 
-    # Employee View
     if user_info['Role'] == "Employee":
         st.subheader("📷 Shroom Live Attendance Scanner")
         from streamlit_qrcode_scanner import qrcode_scanner
@@ -125,59 +96,26 @@ else:
         st.subheader("📊 Your Personal Logs")
         st.dataframe(att_df[att_df["ID"] == current_uid], use_container_width=True)
 
-    # Admin View
     elif user_info['Role'] == "Admin":
         st.subheader("👑 Owner / Admin Control Panel")
         
-        # Excel Generator
-        st.markdown("### 📥 Download Attendance Data to Microsoft Excel")
+        st.markdown("### 📥 Download Attendance Data")
         if not att_df.empty:
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                 att_df.to_excel(writer, index=False, sheet_name='Attendance_Sheet')
-            st.download_button(label="📥 Click to Download Microsoft Excel File (.xlsx)", data=buffer.getvalue(), file_name=f"JK_Suzuki_Attendance_{datetime.now().strftime('%d-%m-%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+            st.download_button(label="📥 Click to Download Excel File (.xlsx)", data=buffer.getvalue(), file_name=f"JK_Suzuki_Attendance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
         else:
-            st.info("No attendance recorded yet to download.")
+            st.info("No attendance recorded yet.")
             
         st.markdown("---")
         
-        # LOCAL QR CODE GENERATOR (১০০% গ্যারান্টিড আসবেই)
+        # বিশ্বস্ত অনলাইন এপিআই দিয়ে কিউআর কোড (এটি কখনো ক্রাশ করবে না)
         with st.expander("🖨 Showroom Official QR Code (প্রিন্ট করার জন্য ক্লিক করুন)"):
-            st.write("নিচের কিউআর কোডটি ডাউনলোড বা বড় করে প্রিন্ট করে দেওয়ালে লাগিয়ে দিন।")
-            qr = qrcode.QRCode(version=1, box_size=10, border=4)
-            qr.add_data(SHOWROOM_QR_SECRET)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            st.image(buf.getvalue(), caption="JK Suzuki Official QR Code", width=300)
+            st.write("নিচের কিউআর কোডটি মোবাইল দিয়ে ছবি তুলে দেওয়ালে লাগিয়ে দিন।")
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={SHOWROOM_QR_SECRET}"
+            st.image(qr_url, caption="JK Suzuki QR Code", width=300)
             
         st.markdown("---")
-        with st.expander("➕ Click to Add New Employee Account (Temporary)"):
-            new_id = st.text_input("New Employee ID:").strip()
-            new_name = st.text_input("New Employee Full Name:").strip()
-            new_pass = st.text_input("Set Password:").strip()
-            new_sal = st.number_input("Monthly Base Salary:", min_value=0, value=12000)
-            
-            if st.button("Create Account"):
-                if new_id in st.session_state.custom_users:
-                    st.error("❌ This ID already exists!")
-                elif new_id=="" or new_name=="" or new_pass=="":
-                    st.error("❌ Please fill all fields!")
-                else:
-                    st.session_state.custom_users[new_id] = {"Name": new_name, "Password": new_pass, "Role": "Employee", "Base_Salary": new_sal}
-                    st.success(f"✅ Account created temporary for {new_name}!")
-                    st.rerun()
-
-        st.markdown("---")
-        search_id = st.text_input("🔍 Search Employee ID:").strip()
-        if search_id != "" and search_id in st.session_state.custom_users:
-            emp_data = st.session_state.custom_users[search_id]
-            p_days, h_days, a_days, p_sal, ded = calculate_emp_salary(search_id, emp_data['Base_Salary'], att_df)
-            st.subheader(f"📊 Live Salary Sheet of {emp_data['Name']}")
-            st.write(f"Present: {p_days} Days | Base Salary: ₹{emp_data['Base_Salary']} | **Net Payable: ₹{p_sal}**")
-        
-        st.markdown("---")
-        st.subheader("📋 Overall Live Attendance Sheet (All Employees)")
+        st.subheader("📋 Overall Live Attendance Sheet")
         st.dataframe(att_df, use_container_width=True)
