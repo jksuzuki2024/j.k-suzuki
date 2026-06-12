@@ -173,8 +173,8 @@ def get_next_salary_date(joining_date_str):
         return "Not Set"
 
 # App Config
-st.set_page_config(page_title="JK Suzuki Pro System", layout="wide")
-st.title("🏍️ JK Suzuki Attendance, Shift & Salary Portal")
+st.set_page_config(page_title="JK Motors Pro System", layout="wide")
+st.title("🏍️ JK Motors Attendance, Shift & Salary Portal")
 st.markdown("---")
 
 # Session management for Auto-login and PIN Lock
@@ -232,7 +232,6 @@ if st.session_state.saved_user_id != "":
                     if len(setup_pin) == 4 and setup_pin.isdigit():
                         update_user_pin(current_uid, setup_pin)
                         st.success("PIN set successfully! Next time you open the app, this PIN will be required.")
-                        st.utility_mode = True
                         st.rerun()
                     else:
                         st.error("PIN must be exactly 4 digits!")
@@ -383,7 +382,7 @@ if st.session_state.saved_user_id != "":
                 for _, row in filtered_df.iterrows():
                     emp_id_str = str(row["ID"])
                     with st.container():
-                        st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 💰 **Salary Due Date:** <span style='color:#ff4b4b; font-weight:bold;'>{row['Salary Due Date']}</span>", unsafe_allow_html=True)
+                        st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 💰 **Salary Due Date:** {row['Salary Due Date']}")
                         c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7, c_s8 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4, 3.3])
                         with c_s1:
                             st.write(f"**ID:** {emp_id_str}")
@@ -409,9 +408,9 @@ if st.session_state.saved_user_id != "":
                             with c_btn2:
                                 if st.button(f"🗑️ Delete Account", key=f"src_del_{emp_id_str}", type="secondary"):
                                     delete_user_from_db(emp_id_str)
-                                    st.warning(f"Deleted permanently!")
+                                    st.warning("Deleted permanently!")
                                     st.rerun()
-                    st.markdown("<hr style='margin:0.5em 0px; border-color:#ff4b4b;'>", unsafe_allow_html=True)
+                    st.markdown("---")
             else:
                 st.error("❌ No Employee found with that ID or Name!")
         
@@ -423,4 +422,8 @@ if st.session_state.saved_user_id != "":
             for _, row in df_report.iterrows():
                 emp_id_str = str(row["ID"])
                 with st.container():
-                    st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** <span style='color:#00ff00; font-weight:bold;'>{row['Salary Due Date']}</span>", unsafe_allow_html=Tr
+                    st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** {row['Salary Due Date']}")
+                    col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7, col_emp8 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4, 3.3])
+                    with col_emp1:
+                        st.write(f"**ID:** {emp_id_str}")
+                    with col
