@@ -273,7 +273,7 @@ if st.session_state.saved_user_id != "":
             st.metric(label="📉 Total Salary Deducted", value=f"₹{ded}")
             st.write("হাফ ডে এবং অ্যাবসেন্টের জন্য কাটা টাকা")
             
-        st.info(f"⚠️ **Note:** আপনার লেট হাজিরার সংখ্যা: **{l_days} দিন**। প্রতি মাসে ৪টি পেইড লিভ (Paid Leave) সিস্টেমে অটোমেটিক যোগ করা থাকে।")
+        st.info(f"⚠️ **Note:** আপনার লেট হাজিরার সংখ্যা: **{l_days} দিন**। প্রতি মাসে ৪টি পেইড লিভ (Paid Leave)系统中 অটোমেটিক যোগ করা থাকে।")
         
         st.markdown("---")
         st.subheader("📷 Shroom Attendance Scanner")
@@ -381,35 +381,35 @@ if st.session_state.saved_user_id != "":
                 st.info(f"🎯 Found {len(filtered_df)} result(s):")
                 for _, row in filtered_df.iterrows():
                     emp_id_str = str(row["ID"])
-                    with st.container():
-                        st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 💰 **Salary Due Date:** {row['Salary Due Date']}")
-                        c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7, c_s8 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4, 3.3])
-                        with c_s1:
-                            st.write(f"**ID:** {emp_id_str}")
-                        with c_s2:
-                            st.write(f"**Name:** {row['Name']}")
-                        with c_s3:
-                            st.write(f"🟢 Full: **{row['Full Day']}**")
-                        with c_s4:
-                            st.write(f"🟡 Half: **{row['Half Day']}**")
-                        with c_s5:
-                            st.write(f"❌ Abs: **{row['Actual Absents']}**")
-                        with c_s6:
-                            st.write(f"⚠️ Late: **{row['Late Days']}**")
-                        with c_s7:
-                            st.write(f"💰 Pay: **₹{row['Net Payable Salary (₹)']}**")
-                        with c_s8:
-                            c_btn1, c_btn2 = st.columns(2)
-                            with c_btn1:
-                                if st.button(f"🔄 Paid & Refresh", key=f"src_ref_{emp_id_str}", type="primary"):
-                                    clear_employee_attendance(emp_id_str)
-                                    st.success(f"Reset done for {row['Name']}!")
-                                    st.rerun()
-                            with c_btn2:
-                                if st.button(f"🗑️ Delete Account", key=f"src_del_{emp_id_str}", type="secondary"):
-                                    delete_user_from_db(emp_id_str)
-                                    st.warning("Deleted permanently!")
-                                    st.rerun()
+                    st.write(f"🗓️ **Join Date:** {row['Joining Date']} | 💰 **Salary Due Date:** {row['Salary Due Date']}")
+                    
+                    c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4])
+                    with c_s1:
+                        st.write(f"**ID:** {emp_id_str}")
+                    with c_s2:
+                        st.write(f"**Name:** {row['Name']}")
+                    with c_s3:
+                        st.write(f"🟢 Full: **{row['Full Day']}**")
+                    with c_s4:
+                        st.write(f"🟡 Half: **{row['Half Day']}**")
+                    with c_s5:
+                        st.write(f"❌ Abs: **{row['Actual Absents']}**")
+                    with c_s6:
+                        st.write(f"⚠️ Late: **{row['Late Days']}**")
+                    with c_s7:
+                        st.write(f"💰 Pay: **₹{row['Net Payable Salary (₹)']}**")
+                        
+                    c_btn1, c_btn2 = st.columns(2)
+                    with c_btn1:
+                        if st.button("🔄 Paid & Refresh", key=f"src_ref_{emp_id_str}", type="primary"):
+                            clear_employee_attendance(emp_id_str)
+                            st.success(f"Reset done for {row['Name']}!")
+                            st.rerun()
+                    with c_btn2:
+                        if st.button("🗑️ Delete Account", key=f"src_del_{emp_id_str}", type="secondary"):
+                            delete_user_from_db(emp_id_str)
+                            st.warning("Deleted permanently!")
+                            st.rerun()
                     st.markdown("---")
             else:
                 st.error("❌ No Employee found with that ID or Name!")
@@ -421,9 +421,14 @@ if st.session_state.saved_user_id != "":
         if not df_report.empty:
             for _, row in df_report.iterrows():
                 emp_id_str = str(row["ID"])
-                with st.container():
-                    st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** {row['Salary Due Date']}")
-                    col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7, col_emp8 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4, 3.3])
-                    with col_emp1:
-                        st.write(f"**ID:** {emp_id_str}")
-                    with col
+                st.write(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** {row['Salary Due Date']}")
+                
+                col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4])
+                with col_emp1:
+                    st.write(f"**ID:** {emp_id_str}")
+                with col_emp2:
+                    st.write(f"**Name:** {row['Name']}")
+                with col_emp3:
+                    st.write(f"🟢 Full: **{row['Full Day']}**")
+                with col_emp4:
+                    st.write(f"🟡 Half: **{row['Half Day']}**")
