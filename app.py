@@ -16,19 +16,22 @@ ATT_FILE = "attendance_database.xlsx"
 # Initializing permanent local databases
 def init_databases():
     fixed_accounts = {
-        "admin": {"Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0, "Shift_Time": "09:00 AM", "Joining_Date": "2026-01-01"},
-        "101": {"Name": "Amit Kumar", "Password": "password101", "Role": "Employee", "Base_Salary": 15000, "Shift_Time": "09:00 AM", "Joining_Date": "2026-01-01"},
-        "102": {"Name": "Rahul Singh", "Password": "password102", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "09:30 AM", "Joining_Date": "2026-01-05"},
-        "114": {"Name": "Jahir", "Password": "jahir", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "10:00 AM", "Joining_Date": "2026-01-10"}
+        "admin": {"Name": "Showroom Owner", "Password": "admin786", "Role": "Admin", "Base_Salary": 0, "Shift_Time": "09:00 AM", "Joining_Date": "2026-01-01", "PIN": ""},
+        "101": {"Name": "Amit Kumar", "Password": "password101", "Role": "Employee", "Base_Salary": 15000, "Shift_Time": "09:00 AM", "Joining_Date": "2026-01-01", "PIN": ""},
+        "102": {"Name": "Rahul Singh", "Password": "password102", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "09:30 AM", "Joining_Date": "2026-01-05", "PIN": ""},
+        "114": {"Name": "Jahir", "Password": "jahir", "Role": "Employee", "Base_Salary": 12000, "Shift_Time": "10:00 AM", "Joining_Date": "2026-01-10", "PIN": ""}
     }
     if not os.path.exists(DB_FILE):
-        rows = [{"ID": str(k), "Name": v["Name"], "Password": str(v["Password"]), "Role": v["Role"], "Base_Salary": float(v["Base_Salary"]), "Shift_Time": v["Shift_Time"], "Joining_Date": v["Joining_Date"]} for k, v in fixed_accounts.items()]
+        rows = [{"ID": str(k), "Name": v["Name"], "Password": str(v["Password"]), "Role": v["Role"], "Base_Salary": float(v["Base_Salary"]), "Shift_Time": v["Shift_Time"], "Joining_Date": v["Joining_Date"], "PIN": v["PIN"]} for k, v in fixed_accounts.items()]
         pd.DataFrame(rows).to_excel(DB_FILE, index=False)
     else:
         df = pd.read_excel(DB_FILE)
         if "Joining_Date" not in df.columns:
             df["Joining_Date"] = "2026-01-01"
-            df.to_excel(DB_FILE, index=False)
+        if "PIN" not in df.columns:
+            df["PIN"] = ""
+        df["PIN"] = df["PIN"].fillna("").astype(str)
+        df.to_excel(DB_FILE, index=False)
     
     if not os.path.exists(ATT_FILE):
         pd.DataFrame(columns=["Date", "ID", "Name", "Entry Time", "Exit Time", "Status", "Is_Late"]).to_excel(ATT_FILE, index=False)
@@ -42,6 +45,9 @@ def get_all_users():
         df["Shift_Time"] = "09:00 AM"
     if "Joining_Date" not in df.columns:
         df["Joining_Date"] = "2026-01-01"
+    if "PIN" not in df.columns:
+        df["PIN"] = ""
+    df["PIN"] = df["PIN"].fillna("").astype(str)
     return {
         str(row["ID"]).strip(): {
             "Name": row["Name"], 
@@ -49,7 +55,8 @@ def get_all_users():
             "Role": row["Role"], 
             "Base_Salary": float(row["Base_Salary"]), 
             "Shift_Time": str(row["Shift_Time"]),
-            "Joining_Date": str(row["Joining_Date"])
+            "Joining_Date": str(row["Joining_Date"]),
+            "PIN": str(row["PIN"]).strip()
         } for _, row in df.iterrows()
     }
 
@@ -62,9 +69,16 @@ def add_user_to_db(uid, name, password, base_salary, shift_time, joining_date):
         "Role": "Employee", 
         "Base_Salary": float(base_salary), 
         "Shift_Time": shift_time,
-        "Joining_Date": str(joining_date)
+        "Joining_Date": str(joining_date),
+        "PIN": ""
     }])
     df = pd.concat([df, new_row], ignore_index=True)
+    df.to_excel(DB_FILE, index=False)
+
+def update_user_pin(uid, new_pin):
+    df = pd.read_excel(DB_FILE)
+    df["ID"] = df["ID"].astype(str).str.strip()
+    df.loc[df["ID"] == str(uid).strip(), "PIN"] = str(new_pin).strip()
     df.to_excel(DB_FILE, index=False)
 
 def delete_user_from_db(emp_id):
@@ -100,7 +114,7 @@ def check_if_late(entry_str, shift_str):
     except:
         return "No"
 
-# ADVANCED SALARY LOGIC WITH HALF DAY COUNT
+# ADVANCED SALARY LOGIC
 def calculate_salary_report(emp_id, base_salary, joining_date_str):
     total_cycle_days = 30
     allowed_holidays = 4
@@ -163,42 +177,82 @@ st.set_page_config(page_title="JK Suzuki Pro System", layout="wide")
 st.title("🏍️ JK Suzuki Attendance, Shift & Salary Portal")
 st.markdown("---")
 
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user_id = ""
+# Session management for Auto-login and PIN Lock
+if 'saved_user_id' not in st.session_state:
+    st.session_state.saved_user_id = ""
+if 'pin_verified' not in st.session_state:
+    st.session_state.pin_verified = False
 
 all_users = get_all_users()
 
-if not st.session_state.logged_in:
-    st.subheader("🔒 User Login")
-    col1, col2 = st.columns(2)
-    with col1:
-        login_id = st.text_input("Enter your ID No:").strip()
-    with col2:
-        login_pass = st.text_input("Enter Password:", type="password").strip()
-        
-    if st.button("Login", type="primary"):
-        if login_id in all_users and str(all_users[login_id]["Password"]) == login_pass:
-            st.session_state.logged_in = True
-            st.session_state.user_id = login_id
-            st.rerun()
-        else:
-            st.error("Invalid ID or Password!")
-else:
-    current_uid = st.session_state.user_id
-    user_info = all_users[current_uid]
+# Check if user is already saved/logged in permanently
+if st.session_state.saved_user_id != "":
+    current_uid = st.session_state.saved_user_id
+    user_info = all_users.get(current_uid)
     
+    if not user_info:
+        st.session_state.saved_user_id = ""
+        st.rerun()
+        
+    # Check if security PIN lock is enabled for this employee
+    if user_info["PIN"] != "" and not st.session_state.pin_verified:
+        st.subheader("🔒 Security PIN Lock")
+        st.info(f"Welcome back, {user_info['Name']}! Please enter your 4-digit PIN to access your dashboard.")
+        
+        entered_pin = st.text_input("Enter 4-Digit Security PIN:", type="password", max_chars=4, key="pin_screen_input").strip()
+        if st.button("Unlock Dashboard", type="primary"):
+            if entered_pin == user_info["PIN"]:
+                st.session_state.pin_verified = True
+                st.success("Access Granted!")
+                st.rerun()
+            else:
+                st.error("❌ Incorrect PIN! Try again.")
+                
+        if st.button("Logout / Login with another ID", type="secondary"):
+            st.session_state.saved_user_id = ""
+            st.session_state.pin_verified = False
+            st.rerun()
+            
+        st.stop() # Stops execution here until PIN is correct
+        
+    # --- ACTIVE PORTAL ACCESS AFTER LOGIN/PIN VERIFICATION ---
     st.sidebar.subheader(f"👤 {user_info['Name']}")
     st.sidebar.write(f"**ID:** {current_uid} | **Role:** {user_info['Role']}")
     if user_info['Role'] == "Employee":
-        st.sidebar.write(f"⏰ **Your Shift Time:** {user_info['Shift_Time']}")
+        st.sidebar.write(f"⏰ **Shift Time:** {user_info['Shift_Time']}")
         st.sidebar.write(f"📅 **Joining Date:** {user_info['Joining_Date']}")
         
-    if st.sidebar.button("Logout", type="secondary"):
-        st.session_state.logged_in = False
+    # PIN Configuration Tool on Sidebar
+    if user_info["Role"] == "Employee":
+        with st.sidebar.expander("🔐 Lock Screen PIN Setup"):
+            if user_info["PIN"] == "":
+                st.warning("You haven't set a security PIN yet.")
+                setup_pin = st.text_input("Set 4-Digit PIN:", type="password", max_chars=4, key="pin_set_new").strip()
+                if st.button("Save PIN"):
+                    if len(setup_pin) == 4 and setup_pin.isdigit():
+                        update_user_pin(current_uid, setup_pin)
+                        st.success("PIN set successfully! Next time you open the app, this PIN will be required.")
+                        st.utility_mode = True
+                        st.rerun()
+                    else:
+                        st.error("PIN must be exactly 4 digits!")
+            else:
+                st.success("PIN Lock is ACTIVE")
+                change_pin = st.text_input("Enter New 4-Digit PIN:", type="password", max_chars=4, key="pin_change_new").strip()
+                if st.button("Change PIN"):
+                    if len(change_pin) == 4 and change_pin.isdigit():
+                        update_user_pin(current_uid, change_pin)
+                        st.success("PIN updated successfully!")
+                        st.rerun()
+                    else:
+                        st.error("PIN must be exactly 4 digits!")
+                        
+    if st.sidebar.button("Full Logout (ID/Password Required Next Time)", type="secondary"):
+        st.session_state.saved_user_id = ""
+        st.session_state.pin_verified = False
         st.rerun()
         
-    # EMPLOYEE VIEW (HIDDEN BASE SALARY & NET PAYABLE)
+    # EMPLOYEE VIEW
     if user_info["Role"] == "Employee":
         f_days, h_days, hol_days, a_days, l_days, p_sal, ded = calculate_salary_report(current_uid, user_info['Base_Salary'], user_info['Joining_Date'])
         next_pay_day = get_next_salary_date(user_info['Joining_Date'])
@@ -266,11 +320,11 @@ else:
         st.markdown("---")
         st.dataframe(df_att[df_att["ID"].astype(str) == str(current_uid)], use_container_width=True)
 
-    # ADMIN VIEW (UNTOUCHED - ALL DETAILS VISIBLE AS BEFORE)
+    # ADMIN VIEW
     elif user_info["Role"] == "Admin":
         st.subheader("👑 Owner Control Panel")
         
-        with st.expander("➕ Add New Employee & Shift Time (নতুন কর্মচারী ও টাইম সেট করুন)"):
+        with st.expander("➕ Add New Employee & Shift Time"):
             n_id = st.text_input("New Employee ID No:").strip()
             n_name = st.text_input("Employee Full Name:").strip()
             n_pass = st.text_input("Set Password:").strip()
@@ -369,49 +423,4 @@ else:
             for _, row in df_report.iterrows():
                 emp_id_str = str(row["ID"])
                 with st.container():
-                    st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** <span style='color:#00ff00; font-weight:bold;'>{row['Salary Due Date']}</span>", unsafe_allow_html=True)
-                    col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7, col_emp8 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4, 3.3])
-                    with col_emp1:
-                        st.write(f"**ID:** {emp_id_str}")
-                    with col_emp2:
-                        st.write(f"**Name:** {row['Name']}")
-                    with col_emp3:
-                        st.write(f"🟢 Full: **{row['Full Day']}**")
-                    with col_emp4:
-                        st.write(f"🟡 Half: **{row['Half Day']}**")
-                    with col_emp5:
-                        st.write(f"❌ Abs: **{row['Actual Absents']}**")
-                    with col_emp6:
-                        st.write(f"⚠️ Late: **{row['Late Days']}**")
-                    with col_emp7:
-                        st.write(f"💰 Pay: **₹{row['Net Payable Salary (₹)']}**")
-                    with col_emp8:
-                        col_mbtn1, col_mbtn2 = st.columns(2)
-                        with col_mbtn1:
-                            if st.button(f"🔄 Paid & Refresh", key=f"main_ref_{emp_id_str}", type="secondary"):
-                                clear_employee_attendance(emp_id_str)
-                                st.success(f"Reset done for {row['Name']}!")
-                                st.rerun()
-                        with col_mbtn2:
-                            if st.button(f"🗑️ Delete Account", key=f"main_del_{emp_id_str}", type="secondary"):
-                                delete_user_from_db(emp_id_str)
-                                st.warning(f"Deleted permanently!")
-                                u_rerun()
-                st.markdown("<hr style='margin:0.5em 0px;'>", unsafe_allow_html=True)
-        else:
-            st.info("No employee accounts registered yet.")
-
-        st.markdown("---")
-        df_att = get_attendance()
-        if not df_att.empty:
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-                df_att.to_excel(writer, index=False, sheet_name='Sheet1')
-            st.download_button(label="📥 Download Master Attendance Sheets (.xlsx)", data=buf.getvalue(), file_name="JK_Suzuki_Master_Attendance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        
-        with st.expander("🖨 Showroom Official QR Code"):
-            st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={SHOWROOM_QR_SECRET}", width=300)
-            
-        st.markdown("---")
-        st.subheader("📋 Overall Master Attendance Logs (All Database)")
-        st.dataframe(df_att, use_container_width=True)
+                    st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** <span style='color:#00ff00; font-weight:bold;'>{row['Salary Due Date']}</span>", unsafe_allow_html=Tr
