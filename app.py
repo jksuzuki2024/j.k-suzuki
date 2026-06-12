@@ -144,28 +144,19 @@ def calculate_salary_report(emp_id, base_salary, joining_date_str):
         half_days = len(emp_logs[emp_logs["Status"] == "Half Day"])
         late_days = len(emp_logs[emp_logs["Is_Late"] == "Yes"])
         
-    # সোজা হিসাব: মোট হাজির দিনের ক্রেডিট (ফুল ডে = ১, হাফ ডে = ০.৫)
     total_present_credit = full_present_days + (half_days * 0.5)
-    
-    # অনুপস্থিত দিন = রানিং সাইকেলের মোট দিন - মোট হাজির দিনের ক্রেডিট
     actual_absents = max(0.0, elapsed_days - total_present_credit)
-    
-    # একদিনের বেতনের হিসাব (৩০ দিন ধরে)
     per_day_salary = base_salary / total_cycle_days
     
-    # লেট ফাইন লজিক (৫ দিন লেট হলে ০.৫ দিন এবং ১০ দিন লেট হলে ১ দিনের বেতন কাটা যাবে)
     late_fine_days = 0.0
     if late_days >= 10:
         late_fine_days = 1.0
     elif late_days >= 5:
         late_fine_days = 0.5
         
-    # মোট অনুপস্থিতি এবং লেট ফাইন মিলিয়ে মোট কাটার টাকা (Deduction)
-    # অনুপস্থিত দিন (যেমন ১ দিন এবসেন্ট + ১ দিন হাফ ডে = ১.৫ দিন অনুপস্থিতি)
     total_deduction = round((actual_absents + late_fine_days) * per_day_salary, 2)
-    total_deduction = min(total_deduction, base_salary) # মূল বেতনের বেশি কাটা যাবে না
+    total_deduction = min(total_deduction, base_salary)
     
-    # নেট পেয়াবল স্যালারি = মূল বেতন - কাটার টাকা
     net_payable = round(base_salary - total_deduction, 2)
     net_payable = max(0.0, net_payable)
     
@@ -199,8 +190,7 @@ if st.session_state.logged_in_uid != "":
     if not user_info:
         st.session_state.logged_in_uid = ""
         st.session_state.is_pin_unlocked = False
-        st.sidebar.button("Refresh", on_click=st.rerun)
-        st.stop()
+        st.rerun()
         
     # Security PIN Lock Verification Screen
     if user_info["Role"] == "Employee" and user_info["PIN"] != "" and not st.session_state.is_pin_unlocked:
@@ -214,15 +204,14 @@ if st.session_state.logged_in_uid != "":
             if st.button("Unlock Profile", type="primary"):
                 if entered_pin == user_info["PIN"]:
                     st.session_state.is_pin_unlocked = True
-                    st.success("Access Granted!")
-                    st.columns([1])[0].button("Enter Dashboard", on_click=st.rerun)
+                    st.rerun()
                 else:
                     st.error("❌ ভুল পিন নম্বর!")
         with col_btn2:
             if st.button("Logout Account", key="logout_pin_scr"):
                 st.session_state.logged_in_uid = ""
                 st.session_state.is_pin_unlocked = False
-                st.columns([1])[0].button("Confirm", on_click=st.rerun)
+                st.rerun()
         st.stop()
 
     # Sidebar Panel
@@ -241,8 +230,7 @@ if st.session_state.logged_in_uid != "":
                     if len(new_pin) == 4 and new_pin.isdigit():
                         update_user_pin(current_uid, new_pin)
                         st.session_state.is_pin_unlocked = True
-                        st.success("✅ পিন সেট হয়েছে!")
-                        st.columns([1])[0].button("Refresh", on_click=st.rerun)
+                        st.rerun()
                     else:
                         st.error("পিন অবশ্যই ৪ ডিজিটের সংখ্যা হবে!")
             else:
@@ -252,16 +240,14 @@ if st.session_state.logged_in_uid != "":
                     if len(change_pin) == 4 and change_pin.isdigit():
                         update_user_pin(current_uid, change_pin)
                         st.session_state.is_pin_unlocked = True
-                        st.success("✅ পিন আপডেট হয়েছে!")
-                        st.columns([1])[0].button("Refresh", on_click=st.rerun)
+                        st.rerun()
                     else:
                         st.error("পিন অবশ্যই ৪ ডিজিটের সংখ্যা হবে!")
 
     if st.sidebar.button("Full Logout (Clear Session)", type="secondary"):
         st.session_state.logged_in_uid = ""
         st.session_state.is_pin_unlocked = False
-        st.columns([1])[0].button("Confirm Logout", on_click=st.rerun)
-        st.stop()
+        st.rerun()
 
     # --- EMPLOYEE VIEW ---
     if user_info["Role"] == "Employee":
@@ -301,8 +287,7 @@ if st.session_state.logged_in_uid != "":
                 
                 new_row = pd.DataFrame([{"Date": c_date, "ID": str(current_uid), "Name": user_info['Name'], "Entry Time": c_time, "Exit Time": "Not Out Yet", "Status": attendance_status, "Is_Late": is_late_status}])
                 save_attendance(pd.concat([df_att, new_row], ignore_index=True))
-                st.success("✅ Entry Recorded!")
-                st.columns([1])[0].button("Reload app", on_click=st.rerun)
+                st.rerun()
         elif today_entry.iloc[0]["Exit Time"] == "Not Out Yet":
             st.info("⚠️ ছুটির সময় বিদায় নিতে পুনরায় QR Code স্ক্যান করুন।")
             val = qrcode_scanner(key='exit_scan')
@@ -312,8 +297,7 @@ if st.session_state.logged_in_uid != "":
                 
                 df_att.loc[(df_att["Date"] == c_date) & (df_att["ID"].astype(str) == str(current_uid)), "Exit Time"] = c_time
                 save_attendance(df_att)
-                st.success("✅ Exit Recorded!")
-                st.columns([1])[0].button("Reload app", on_click=st.rerun)
+                st.rerun()
         else:
             st.success("🎉 Today's Attendance Completed!")
             
@@ -345,7 +329,7 @@ if st.session_state.logged_in_uid != "":
                 else:
                     add_user_to_db(n_id, n_name, n_pass, n_sal, final_shift, str(n_jdate))
                     st.success("Employee Added!")
-                    st.columns([1])[0].button("Update Dashboard", on_click=st.rerun)
+                    st.rerun()
                     
         st.markdown("---")
         
@@ -388,13 +372,11 @@ if st.session_state.logged_in_uid != "":
                 with cb1:
                     if st.button("🔄 Paid & Reset", key=f"p_{eid}"):
                         clear_employee_attendance(eid)
-                        st.success("Reset Completed!")
-                        st.columns([1])[0].button("Refresh View", on_click=st.rerun)
+                        st.rerun()
                 with cb2:
                     if st.button("🗑️ Delete Account", key=f"d_{eid}"):
                         delete_user_from_db(eid)
-                        st.warning("Account Deleted!")
-                        st.columns([1])[0].button("Refresh View", on_click=st.rerun)
+                        st.rerun()
                 st.markdown("---")
         else:
             st.info("No records found.")
@@ -424,7 +406,6 @@ else:
         if l_id in all_users and str(all_users[l_id]["Password"]) == l_pass:
             st.session_state.logged_in_uid = l_id
             st.session_state.is_pin_unlocked = False
-            st.success("Logging in...")
-            st.columns([1])[0].button("Click to Proceed", on_click=st.rerun)
+            st.rerun()
         else:
             st.error("❌ ভুল আইডি অথবা পাসওয়ার্ড!")
