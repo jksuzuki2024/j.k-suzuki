@@ -176,85 +176,86 @@ st.set_page_config(page_title="JK Motors Pro System", layout="wide")
 st.title("🏍️ JK Motors Attendance, Shift & Salary Portal")
 st.markdown("---")
 
-# Session management for Auto-login and PIN Lock
-if 'saved_user_id' not in st.session_state:
-    st.session_state.saved_user_id = ""
-if 'pin_verified' not in st.session_state:
-    st.session_state.pin_verified = False
+# 🟢 PERSISTENT SESSION TRACKING (ব্রাউজার রিফ্রেশ বা ব্যাক করলেও ডাটা মুছবে না)
+if 'logged_in_uid' not in st.session_state:
+    st.session_state.logged_in_uid = ""
+if 'is_pin_unlocked' not in st.session_state:
+    st.session_state.is_pin_unlocked = False
 
 all_users = get_all_users()
 
-# --- STEP 1: LOGGED IN USER SESSION CHECK ---
-if st.session_state.saved_user_id != "":
-    current_uid = st.session_state.saved_user_id
+# --- ১. অলরেডি লগইন করা থাকলে (আইডি পাসওয়ার্ড লকড) ---
+if st.session_state.logged_in_uid != "":
+    current_uid = st.session_state.logged_in_uid
     user_info = all_users.get(current_uid)
     
     if not user_info:
-        st.session_state.saved_user_id = ""
-        st.session_state.pin_verified = False
+        st.session_state.logged_in_uid = ""
+        st.session_state.is_pin_unlocked = False
         st.rerun()
         
-    # --- STEP 2: SECURITY PIN SCREEN (IF PIN IS ALREADY SET) ---
-    if user_info["Role"] == "Employee" and user_info["PIN"] != "" and not st.session_state.pin_verified:
-        st.subheader("🔒 Security PIN Lock Screen")
-        st.info(f"Welcome back, {user_info['Name']}! Please enter your 4-digit PIN to access the dashboard.")
+    # 🔒 কর্মচারীদের জন্য পিন লক স্ক্রিন (যদি পিন আগে থেকে সেট করা থাকে)
+    if user_info["Role"] == "Employee" and user_info["PIN"] != "" and not st.session_state.is_pin_unlocked:
+        st.subheader(f"🔒 Welcome Back, {user_info['Name']}!")
+        st.info("আপনার প্রোফাইলটি সুরক্ষিত রাখতে ৪ ডিজিটের সিকিউরিটি পিন দিন।")
         
-        entered_pin = st.text_input("Enter 4-Digit PIN:", type="password", max_chars=4, key="pin_screen_lock_input").strip()
+        entered_pin = st.text_input("Enter Profile PIN:", type="password", max_chars=4, key="app_main_pin_lock").strip()
         
-        c_p1, c_p2 = st.columns([1, 4])
-        with c_p1:
-            if st.button("Unlock System", type="primary"):
+        c_l1, c_l2 = st.columns([1, 4])
+        with c_l1:
+            if st.button("Unlock Profile", type="primary", key="btn_unlock_prof"):
                 if entered_pin == user_info["PIN"]:
-                    st.session_state.pin_verified = True
+                    st.session_state.is_pin_unlocked = True
                     st.success("Access Granted!")
                     st.rerun()
                 else:
-                    st.error("❌ Incorrect PIN!")
-        with c_p2:
-            if st.button("Change Account / Logout", type="secondary"):
-                st.session_state.saved_user_id = ""
-                st.session_state.pin_verified = False
+                    st.error("❌ ভুল পিন! আবার চেষ্টা করুন।")
+        with c_l2:
+            if st.button("Logout from ID", key="btn_reset_full_log"):
+                st.session_state.logged_in_uid = ""
+                st.session_state.is_pin_unlocked = False
                 st.rerun()
         st.stop()
-        
-    # --- STEP 3: MAIN SYSTEM PORTAL LOGGED IN VIEW ---
+
+    # --- ২. মেইন ড্যাশবোর্ড ইন্টারফেস (লগইন বা পিন খোলার পর) ---
     st.sidebar.subheader(f"👤 {user_info['Name']}")
     st.sidebar.write(f"**ID:** {current_uid} | **Role:** {user_info['Role']}")
+    
     if user_info['Role'] == "Employee":
         st.sidebar.write(f"⏰ **Shift Time:** {user_info['Shift_Time']}")
         st.sidebar.write(f"📅 **Joining Date:** {user_info['Joining_Date']}")
         
-        # PIN Setup Panel in Sidebar
-        with st.sidebar.expander("🔐 Quick Login PIN Setup"):
+        # কর্মচারীর নিজস্ব পিন সেট করার এরিয়া (সাইডবার)
+        with st.sidebar.expander("🔐 Set/Change Your Login PIN"):
             if user_info["PIN"] == "":
-                st.warning("You haven't set a PIN yet.")
-                setup_pin = st.text_input("Create 4-Digit PIN:", type="password", max_chars=4, key="sidebar_pin_create").strip()
-                if st.button("Save New PIN"):
-                    if len(setup_pin) == 4 and setup_pin.isdigit():
-                        update_user_pin(current_uid, setup_pin)
-                        st.session_state.pin_verified = True
-                        st.success("PIN Saved! From next time, only PIN is required.")
+                st.warning("আপনি এখনো কোনো পিন লক সেট করেননি।")
+                new_pin = st.text_input("Create 4-Digit PIN:", type="password", max_chars=4, key="set_user_pin_fresh").strip()
+                if st.button("Save PIN", key="btn_save_fresh_pin"):
+                    if len(new_pin) == 4 and new_pin.isdigit():
+                        update_user_pin(current_uid, new_pin)
+                        st.session_state.is_pin_unlocked = True
+                        st.success("✅ পিন সেট হয়েছে! এর পর থেকে শুধু এই পিন দিয়েই লক খুলবে।")
                         st.rerun()
                     else:
-                        st.error("Must be 4 digits!")
+                        st.error("পিন অবশ্যই ৪টি সংখ্যার হতে হবে!")
             else:
-                st.success("🔒 PIN Lock is Active")
-                change_pin = st.text_input("Change 4-Digit PIN:", type="password", max_chars=4, key="sidebar_pin_change").strip()
-                if st.button("Update PIN"):
+                st.success("🔒 আপনার পিন লক চালু আছে।")
+                change_pin = st.text_input("Enter New PIN to Change:", type="password", max_chars=4, key="change_user_pin_exist").strip()
+                if st.button("Update PIN", key="btn_update_existing_pin"):
                     if len(change_pin) == 4 and change_pin.isdigit():
                         update_user_pin(current_uid, change_pin)
-                        st.session_state.pin_verified = True
-                        st.success("PIN Updated!")
+                        st.session_state.is_pin_unlocked = True
+                        st.success("✅ পিন সফলভাবে পরিবর্তন হয়েছে!")
                         st.rerun()
                     else:
-                        st.error("Must be 4 digits!")
-                        
-    if st.sidebar.button("Full Logout (Clear Everything)", type="secondary"):
-        st.session_state.saved_user_id = ""
-        st.session_state.pin_verified = False
+                        st.error("পিন অবশ্যই ৪টি সংখ্যার হতে হবে!")
+
+    if st.sidebar.button("Logout Account (আইডি-পাসওয়ার্ড মুছুন)", type="secondary", key="main_sidebar_logout"):
+        st.session_state.logged_in_uid = ""
+        st.session_state.is_pin_unlocked = False
         st.rerun()
-        
-    # EMPLOYEE INTERFACE VIEW
+
+    # --- ৩. কর্মচারী ভিউ (EMPLOYEE DASHBOARD) ---
     if user_info["Role"] == "Employee":
         f_days, h_days, hol_days, a_days, l_days, p_sal, ded = calculate_salary_report(current_uid, user_info['Base_Salary'], user_info['Joining_Date'])
         next_pay_day = get_next_salary_date(user_info['Joining_Date'])
@@ -263,18 +264,10 @@ if st.session_state.saved_user_id != "":
         st.warning(f"🗓️ **Your Joining Date:** {user_info['Joining_Date']} | 🗓️ **Next Salary Calculation Cycle:** {next_pay_day}")
         
         c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.metric(label="🟢 Full Present Days", value=f"{f_days} Days")
-            st.write("শোরুমে সম্পূর্ণ সময় উপস্থিতির দিন")
-        with c2:
-            st.metric(label="🟡 Half Days Worked", value=f"{h_days} Days")
-            st.write("২টোর পর এন্ট্রি বা ২টোর আগে এক্সিট")
-        with c3:
-            st.metric(label="❌ Actual Absents", value=f"{a_days} Days")
-            st.write("যোগদানের পর থেকে মোট অনুপস্থিতি")
-        with c4:
-            st.metric(label="📉 Total Salary Deducted", value=f"₹{ded}")
-            st.write("হাফ ডে এবং অ্যাবসেন্টের জন্য কাটা টাকা")
+        with c1: st.metric(label="🟢 Full Present Days", value=f"{f_days} Days")
+        with c2: st.metric(label="🟡 Half Days Worked", value=f"{h_days} Days")
+        with c3: st.metric(label="❌ Actual Absents", value=f"{a_days} Days")
+        with c4: st.metric(label="📉 Total Salary Deducted", value=f"₹{ded}")
             
         st.info(f"⚠️ **Note:** আপনার লেট হাজিরার সংখ্যা: **{l_days} দিন**। প্রতি মাসে ৪টি পেইড লিভ (Paid Leave) সিস্টেমে অটোমেটিক যোগ করা থাকে।")
         
@@ -291,7 +284,7 @@ if st.session_state.saved_user_id != "":
         
         if today_entry.empty:
             st.warning("📋 আপনার আজকের হাজিরা দেওয়া হয়নি। শোরুমের QR Code স্ক্যান করুন।")
-            val = qrcode_scanner(key='entry_scan')
+            val = qrcode_scanner(key='entry_scan_active')
             if val == SHOWROOM_QR_SECRET:
                 is_late_status = check_if_late(c_time, user_info['Shift_Time'])
                 attendance_status = "Present"
@@ -304,7 +297,7 @@ if st.session_state.saved_user_id != "":
                 st.rerun()
         elif today_entry.iloc[0]["Exit Time"] == "Not Out Yet":
             st.info("⚠️ ছুটির সময় বিদায় নেওয়ার জন্য আবার QR Code স্ক্যান করুন।")
-            val = qrcode_scanner(key='exit_scan')
+            val = qrcode_scanner(key='exit_scan_active')
             if val == SHOWROOM_QR_SECRET:
                 if now_k.hour < 14:
                     df_att.loc[(df_att["Date"] == c_date) & (df_att["ID"].astype(str) == str(current_uid)), "Status"] = "Half Day"
@@ -319,33 +312,33 @@ if st.session_state.saved_user_id != "":
         st.markdown("---")
         st.dataframe(df_att[df_att["ID"].astype(str) == str(current_uid)], use_container_width=True)
 
-    # ADMIN CONTROL PANEL
+    # --- ৪. মালিক ভিউ (ADMIN CONTROL PANEL) ---
     elif user_info["Role"] == "Admin":
         st.subheader("👑 Owner Control Panel")
         
         with st.expander("➕ Add New Employee & Shift Time"):
-            n_id = st.text_input("New Employee ID No:").strip()
-            n_name = st.text_input("Employee Full Name:").strip()
-            n_pass = st.text_input("Set Password:").strip()
-            n_sal = st.number_input("Monthly Base Salary (₹):", min_value=0, value=12000)
-            n_jdate = st.date_input("Select Employee Joining Date:", value=datetime.now(KOLKATA_TZ).date())
+            n_id = st.text_input("New Employee ID No:", key="admin_add_uid").strip()
+            n_name = st.text_input("Employee Full Name:", key="admin_add_name").strip()
+            n_pass = st.text_input("Set Password:", key="admin_add_pass").strip()
+            n_sal = st.number_input("Monthly Base Salary (₹):", min_value=0, value=12000, key="admin_add_sal")
+            n_jdate = st.date_input("Select Employee Joining Date:", value=datetime.now(KOLKATA_TZ).date(), key="admin_add_jdate")
             
-            shift_h = st.selectbox("Shift Hour:", [f"{i:02d}" for i in range(1, 13)], index=8)
-            shift_m = st.selectbox("Shift Minute:", [f"{i:02d}" for i in range(0, 60, 5)], index=0)
-            shift_p = st.selectbox("AM/PM:", ["AM", "PM"], index=0)
+            shift_h = st.selectbox("Shift Hour:", [f"{i:02d}" for i in range(1, 13)], index=8, key="admin_add_sh")
+            shift_m = st.selectbox("Shift Minute:", [f"{i:02d}" for i in range(0, 60, 5)], index=0, key="admin_add_sm")
+            shift_p = st.selectbox("AM/PM:", ["AM", "PM"], index=0, key="admin_add_sp")
             final_shift_time = f"{shift_h}:{shift_m} {shift_p}"
             
-            if st.button("Create Permanent Account", type="primary"):
-                if n_id in all_users:
-                    st.error("❌ ID already exists!")
-                elif n_id == "" or n_name == "" or n_pass == "":
-                    st.error("❌ Fill all fields!")
+            if st.button("Create Permanent Account", type="primary", key="admin_add_btn"):
+                if n_id in all_users: st.error("❌ ID already exists!")
+                elif n_id == "" or n_name == "" or n_pass == "": st.error("❌ Fill all fields!")
                 else:
                     add_user_to_db(n_id, n_name, n_pass, n_sal, final_shift_time, str(n_jdate))
                     st.success(f"✅ Employee {n_name} added!")
                     st.rerun()
                     
         st.markdown("---")
+        
+        # মেম্বারদের ডাটা কালেকশন করা হচ্ছে রিপোর্টের জন্য
         report_rows = []
         for uid, udata in all_users.items():
             if udata["Role"] == "Employee":
@@ -358,55 +351,65 @@ if st.session_state.saved_user_id != "":
                 })
         df_report = pd.DataFrame(report_rows)
         
-        st.subheader("📊 Employees Master Live Salary Sheet")
+        # 🔎 লাইভ সার্চ বার (আইডি বা নাম দিয়ে সার্চ)
+        st.subheader("🔎 Search Employee Profile")
+        search_query = st.text_input("Enter Employee ID or Name to Search:", placeholder="e.g. 114 or Jahir", key="search_bar_input").strip().lower()
+        
+        if search_query and not df_report.empty:
+            filtered_df = df_report[df_report["ID"].str.lower().str.contains(search_query) | df_report["Name"].str.lower().str.contains(search_query)]
+            if not filtered_df.empty:
+                st.info(f"🎯 Found {len(filtered_df)} result(s):")
+                for _, row in filtered_df.iterrows():
+                    emp_id_str = str(row["ID"])
+                    st.write(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** {row['Salary Due Date']}")
+                    c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4])
+                    c_s1.write(f"**ID:** {emp_id_str}")
+                    c_s2.write(f"**Name:** {row['Name']}")
+                    c_s3.write(f"🟢 Full: **{row['Full Day']}**")
+                    c_s4.write(f"🟡 Half: **{row['Half Day']}**")
+                    c_s5.write(f"❌ Abs: **{row['Actual Absents']}**")
+                    c_s6.write(f"⚠️ Late: **{row['Late Days']}**")
+                    c_s7.write(f"💰 Pay: **₹{row['Net Payable Salary (₹)']}**")
+                    
+                    cb1, cb2 = st.columns(2)
+                    if cb1.button("🔄 Paid & Refresh", key=f"src_ref_{emp_id_str}"):
+                        clear_employee_attendance(emp_id_str)
+                        st.success("Reset done!")
+                        st.rerun()
+                    if cb2.button("🗑️ Delete Account", key=f"src_del_{emp_id_str}"):
+                        delete_user_from_db(emp_id_str)
+                        st.warning("Deleted!")
+                        st.rerun()
+                    st.markdown("---")
+            else:
+                st.error("❌ No Employee found with that ID or Name!")
+                
+        st.markdown("---")
+        
+        # 📊 ওভারভিউ টেবিল
+        st.subheader("📊 Employees Master Live Salary Sheet (All Overview)")
         if not df_report.empty:
             for _, row in df_report.iterrows():
                 emp_id_str = str(row["ID"])
                 st.write(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** {row['Salary Due Date']}")
                 col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4])
-                with col_emp1: st.write(f"**ID:** {emp_id_str}")
-                with col_emp2: st.write(f"**Name:** {row['Name']}")
-                with col_emp3: st.write(f"🟢 Full: **{row['Full Day']}**")
-                with col_emp4: st.write(f"🟡 Half: **{row['Half Day']}**")
-                with col_emp5: st.write(f"❌ Abs: **{row['Actual Absents']}**")
-                with col_emp6: st.write(f"⚠️ Late: **{row['Late Days']}**")
-                with col_emp7: st.write(f"💰 Pay: **₹{row['Net Payable Salary (₹)']}**")
+                col_emp1.write(f"**ID:** {emp_id_str}")
+                col_emp2.write(f"**Name:** {row['Name']}")
+                col_emp3.write(f"🟢 Full: **{row['Full Day']}**")
+                col_emp4.write(f"🟡 Half: **{row['Half Day']}**")
+                col_emp5.write(f"❌ Abs: **{row['Actual Absents']}**")
+                col_emp6.write(f"⚠️ Late: **{row['Late Days']}**")
+                col_emp7.write(f"💰 Pay: **₹{row['Net Payable Salary (₹)']}**")
                 
                 col_mbtn1, col_mbtn2 = st.columns(2)
-                with col_mbtn1:
-                    if st.button("🔄 Paid & Refresh", key=f"main_ref_{emp_id_str}"):
-                        clear_employee_attendance(emp_id_str)
-                        st.success("Reset done!")
-                        st.rerun()
-                with col_mbtn2:
-                    if st.button("🗑️ Delete Account", key=f"main_del_{emp_id_str}"):
-                        delete_user_from_db(emp_id_str)
-                        st.warning("Deleted!")
-                        st.rerun()
+                if col_mbtn1.button("🔄 Paid & Refresh", key=f"main_ref_{emp_id_str}"):
+                    clear_employee_attendance(emp_id_str)
+                    st.success("Reset done!")
+                    st.rerun()
+                if col_mbtn2.button("🗑️ Delete Account", key=f"main_del_{emp_id_str}"):
+                    delete_user_from_db(emp_id_str)
+                    st.warning("Deleted!")
+                    st.rerun()
                 st.markdown("---")
-                
-        df_att = get_attendance()
-        if not df_att.empty:
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-                df_att.to_excel(writer, index=False, sheet_name='Sheet1')
-            st.download_button(label="📥 Download Master Attendance Sheets (.xlsx)", data=buf.getvalue(), file_name="JK_Motors_Master_Attendance.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-# --- STEP 4: FRESH UNLOGGED INITIAL LOGIN SCREEN ---
-else:
-    st.subheader("🔒 Sign In to Portal")
-    
-    # ফর্ম ব্যবহার করার কারণে ইনপুট বক্স গায়েব হওয়া বা রেন্ডারিং এরর একদম বন্ধ হয়ে যাবে
-    with st.form(key="showroom_login_form", clear_on_submit=False):
-        login_id = st.text_input("Enter User ID No:", key="input_user_id").strip()
-        login_pass = st.text_input("Enter Password:", type="password", key="input_user_password").strip()
-        submit_login = st.form_submit_button("Verify Account & Login", type="primary")
-        
-    if submit_login:
-        if login_id in all_users and str(all_users[login_id]["Password"]) == login_pass:
-            st.session_state.saved_user_id = login_id  # ব্রাউজারে পার্মানেন্ট সেভ
-            st.session_state.pin_verified = False      # পিন ভেরিফিকেশন অন
-            st.success("🎉 Success! Logging in...")
-            st.rerun()
         else:
-            st.error("❌ Invalid ID or Password! Please check your credentials.")
+            st.info("No empl
