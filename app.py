@@ -198,28 +198,30 @@ else:
         st.session_state.logged_in = False
         st.rerun()
         
-    # EMPLOYEE VIEW
+    # EMPLOYEE VIEW (HIDDEN BASE SALARY & NET PAYABLE)
     if user_info["Role"] == "Employee":
         f_days, h_days, hol_days, a_days, l_days, p_sal, ded = calculate_salary_report(current_uid, user_info['Base_Salary'], user_info['Joining_Date'])
         next_pay_day = get_next_salary_date(user_info['Joining_Date'])
         
-        st.subheader("📊 Your Live Salary & Attendance Sheet")
-        st.warning(f"🗓️ **Your Joining Date:** {user_info['Joining_Date']} | 💰 **Next Salary Due Date:** {next_pay_day}")
+        st.subheader("📊 Your Live Attendance & Leave Deduction Sheet")
+        st.warning(f"🗓️ **Your Joining Date:** {user_info['Joining_Date']} | 🗓️ **Next Salary Calculation Cycle:** {next_pay_day}")
         
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.metric(label="Base Salary", value=f"₹{user_info['Base_Salary']}")
-            st.write(f"💼 **Full Present Days:** {f_days}")
+            st.metric(label="🟢 Full Present Days", value=f"{f_days} Days")
+            st.write("শোরুমে সম্পূর্ণ সময় উপস্থিতির দিন")
         with c2:
-            st.metric(label="Net Payable Salary", value=f"₹{p_sal}")
-            st.write(f"🌗 **Half Days Worked:** {h_days}")
+            st.metric(label="🟡 Half Days Worked", value=f"{h_days} Days")
+            st.write("২টোর পর এন্ট্রি বা ২টোর আগে এক্সিট")
         with c3:
-            st.metric(label="Total Deducted Amount", value=f"₹{ded}")
-            st.write(f"⚠️ **Total Late Days:** {l_days}")
+            st.metric(label="❌ Actual Absents", value=f"{a_days} Days")
+            st.write("যোগদানের পর থেকে মোট অনুপস্থিতি")
         with c4:
-            st.write(f"🌴 **Paid Leaves Added:** {hol_days} Days")
-            st.write(f"❌ **Actual Absents:** {a_days} Days")
+            st.metric(label="📉 Total Salary Deducted", value=f"₹{ded}")
+            st.write("হাফ ডে এবং অ্যাবসেন্টের জন্য কাটা টাকা")
             
+        st.info(f"⚠️ **Note:** আপনার লেট হাজিরার সংখ্যা: **{l_days} দিন**। প্রতি মাসে ৪টি পেইড লিভ (Paid Leave) সিস্টেমে অটোমেটিক যোগ করা থাকে।")
+        
         st.markdown("---")
         st.subheader("📷 Shroom Attendance Scanner")
         from streamlit_qrcode_scanner import qrcode_scanner
@@ -264,7 +266,7 @@ else:
         st.markdown("---")
         st.dataframe(df_att[df_att["ID"].astype(str) == str(current_uid)], use_container_width=True)
 
-    # ADMIN VIEW
+    # ADMIN VIEW (UNTOUCHED - ALL DETAILS VISIBLE AS BEFORE)
     elif user_info["Role"] == "Admin":
         st.subheader("👑 Owner Control Panel")
         
@@ -394,7 +396,7 @@ else:
                             if st.button(f"🗑️ Delete Account", key=f"main_del_{emp_id_str}", type="secondary"):
                                 delete_user_from_db(emp_id_str)
                                 st.warning(f"Deleted permanently!")
-                                st.rerun()
+                                u_rerun()
                 st.markdown("<hr style='margin:0.5em 0px;'>", unsafe_allow_html=True)
         else:
             st.info("No employee accounts registered yet.")
