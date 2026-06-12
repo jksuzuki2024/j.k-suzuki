@@ -80,6 +80,8 @@ def get_attendance():
     df = pd.read_excel(ATT_FILE)
     if "Is_Late" not in df.columns:
         df["Is_Late"] = "No"
+    if "Status" not in df.columns:
+        df["Status"] = "Present"
     return df
 
 def save_attendance(df):
@@ -98,23 +100,49 @@ def check_if_late(entry_str, shift_str):
     except:
         return "No"
 
-def calculate_salary_report(emp_id, base_salary):
-    total_days = 30
+# ADVANCED SALARY LOGIC WITH HALF DAY COUNT
+def calculate_salary_report(emp_id, base_salary, joining_date_str):
+    total_cycle_days = 30
     allowed_holidays = 4
     df_att = get_attendance()
     
+    try:
+        j_date = datetime.strptime(joining_date_str, "%Y-%m-%d").date()
+    except:
+        j_date = datetime.now(KOLKATA_TZ).date()
+        
+    current_today = datetime.now(KOLKATA_TZ).date()
+    
+    if current_today >= j_date:
+        elapsed_days = (current_today - j_date).days + 1
+        elapsed_days = min(elapsed_days, total_cycle_days)
+    else:
+        elapsed_days = 1
+        
+    full_present_days = 0
+    half_days = 0
+    late_days = 0
+    
     if not df_att.empty:
         emp_logs = df_att[df_att["ID"].astype(str) == str(emp_id)]
-        present_days = emp_logs["Date"].nunique()
+        # Count Full Present vs Half Day
+        full_present_days = len(emp_logs[emp_logs["Status"] == "Present"])
+        half_days = len(emp_logs[emp_logs["Status"] == "Half Day"])
         late_days = len(emp_logs[emp_logs["Is_Late"] == "Yes"])
-    else:
-        present_days = 0
-        late_days = 0
         
-    paid_days = min(present_days + allowed_holidays, total_days)
-    absent_days = max(0, total_days - paid_days)
+    # Total attendance credit = Full Days + (Half Days * 0.5)
+    total_present_credit = full_present_days + (half_days * 0.5)
     
-    per_day_salary = base_salary / total_days
+    # Real-time Elapsed Absents
+    actual_absents = max(0.0, elapsed_days - (full_present_days + half_days))
+    
+    # Paid days calculation including fixed 4 allowed holidays
+    paid_days = min(total_present_credit + allowed_holidays, total_cycle_days)
+    
+    # Final unworked or unpaid segment out of 30 days
+    final_unpaid_absents = max(0.0, total_cycle_days - paid_days)
+    
+    per_day_salary = base_salary / total_cycle_days
     
     late_fine_days = 0.0
     if late_days >= 10:
@@ -125,10 +153,9 @@ def calculate_salary_report(emp_id, base_salary):
     net_payable = round((paid_days - late_fine_days) * per_day_salary, 2)
     net_payable = max(0.0, net_payable)
     
-    total_deduction = round((absent_days + late_fine_days) * per_day_salary, 2)
-    late_penalty_cost = round(late_fine_days * per_day_salary, 2)
+    total_deduction = round((final_unpaid_absents + late_fine_days) * per_day_salary, 2)
     
-    return present_days, allowed_holidays, absent_days, late_days, late_penalty_cost, net_payable, total_deduction
+    return full_present_days, half_days, allowed_holidays, actual_absents, late_days, net_payable, total_deduction
 
 def get_next_salary_date(joining_date_str):
     try:
@@ -180,7 +207,7 @@ else:
         
     # EMPLOYEE VIEW
     if user_info["Role"] == "Employee":
-        p_days, h_days, a_days, l_days, l_fine, p_sal, ded = calculate_salary_report(current_uid, user_info['Base_Salary'])
+        f_days, h_days, hol_days, a_days, l_days, p_sal, ded = calculate_salary_report(current_uid, user_info['Base_Salary'], user_info['Joining_Date'])
         next_pay_day = get_next_salary_date(user_info['Joining_Date'])
         
         st.subheader("📊 Your Live Salary & Attendance Sheet")
@@ -189,16 +216,16 @@ else:
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             st.metric(label="Base Salary", value=f"₹{user_info['Base_Salary']}")
-            st.write(f"💼 **Days Present:** {p_days}")
+            st.write(f"💼 **Full Present Days:** {f_days}")
         with c2:
             st.metric(label="Net Payable Salary", value=f"₹{p_sal}")
-            st.write(f"🌴 **Paid Leaves:** {h_days} Days")
+            st.write(f"🌗 **Half Days Worked:** {h_days}")
         with c3:
-            st.metric(label="Late Fine Deducted", value=f"₹{l_fine}")
-            st.write(f"⚠️ **Total Late Days:** {l_days} Days")
+            st.metric(label="Total Deducted Amount", value=f"₹{ded}")
+            st.write(f"⚠️ **Total Late Days:** {l_days}")
         with c4:
-            st.metric(label="Total Deducted (Absent+Late)", value=f"₹{ded}")
-            st.write(f"❌ **Unpaid Absents:** {a_days}")
+            st.write(f"🌴 **Paid Leaves Added:** {hol_days} Days")
+            st.write(f"❌ **Actual Absents:** {a_days} Days")
             
         st.markdown("---")
         st.subheader("📷 Shroom Attendance Scanner")
@@ -216,14 +243,26 @@ else:
             val = qrcode_scanner(key='entry_scan')
             if val == SHOWROOM_QR_SECRET:
                 is_late_status = check_if_late(c_time, user_info['Shift_Time'])
-                new_row = pd.DataFrame([{"Date": c_date, "ID": str(current_uid), "Name": user_info['Name'], "Entry Time": c_time, "Exit Time": "Not Out Yet", "Status": "Present", "Is_Late": is_late_status}])
+                
+                # Half day check if entering at or after 2:00 PM
+                attendance_status = "Present"
+                if now_k.hour >= 14:
+                    attendance_status = "Half Day"
+                    st.warning("⚠️ আপনি দুপুর ২:০০ টার পরে এন্ট্রি নিয়েছেন! এটি Half Day হিসেবে গণ্য করা হলো।")
+                
+                new_row = pd.DataFrame([{"Date": c_date, "ID": str(current_uid), "Name": user_info['Name'], "Entry Time": c_time, "Exit Time": "Not Out Yet", "Status": attendance_status, "Is_Late": is_late_status}])
                 save_attendance(pd.concat([df_att, new_row], ignore_index=True))
-                st.success(f"✅ ENTRY Recorded! Late Status: {is_late_status}")
+                st.success(f"✅ ENTRY Recorded! Status: {attendance_status} | Late: {is_late_status}")
                 st.rerun()
         elif today_entry.iloc[0]["Exit Time"] == "Not Out Yet":
             st.info("⚠️ ছুটির সময় বিদায় নেওয়ার জন্য আবার QR Code স্ক্যান করুন।")
             val = qrcode_scanner(key='exit_scan')
             if val == SHOWROOM_QR_SECRET:
+                # Half day check if exiting before 2:00 PM
+                if now_k.hour < 14:
+                    df_att.loc[(df_att["Date"] == c_date) & (df_att["ID"].astype(str) == str(current_uid)), "Status"] = "Half Day"
+                    st.warning("⚠️ আপনি দুপুর ২:০০ টার আগে এক্সিট নিচ্ছেন! এটি Half Day হিসেবে গণ্য করা হলো।")
+                
                 df_att.loc[(df_att["Date"] == c_date) & (df_att["ID"].astype(str) == str(current_uid)), "Exit Time"] = c_time
                 save_attendance(df_att)
                 st.success("✅ EXIT Recorded!")
@@ -266,7 +305,7 @@ else:
         report_rows = []
         for uid, udata in all_users.items():
             if udata["Role"] == "Employee":
-                p_days, h_days, a_days, l_days, l_fine, p_sal, ded = calculate_salary_report(uid, udata['Base_Salary'])
+                f_days, h_days, hol_days, a_days, l_days, p_sal, ded = calculate_salary_report(uid, udata['Base_Salary'], udata.get('Joining_Date', '2026-01-01'))
                 next_pay = get_next_salary_date(udata.get('Joining_Date', '2026-01-01'))
                 report_rows.append({
                     "ID": uid,
@@ -275,16 +314,17 @@ else:
                     "Salary Due Date": next_pay,
                     "Target Time": udata["Shift_Time"],
                     "Base Salary (₹)": udata["Base_Salary"],
-                    "Present Days": p_days,
+                    "Full Day": f_days,
+                    "Half Day": h_days,
                     "Late Days": l_days,
-                    "Late Fine (₹)": l_fine,
                     "Net Payable Salary (₹)": p_sal,
-                    "Total Deductions (₹)": ded
+                    "Total Deductions (₹)": ded,
+                    "Actual Absents": a_days
                 })
         
         df_report = pd.DataFrame(report_rows)
         
-        # SEARCH EMPLOYEE SECTION
+        # 🔎 SEARCH EMPLOYEE SECTION (UPDATED DETAILS)
         st.subheader("🔎 Search Employee Profile (আইডি বা নাম দিয়ে খুঁজুন)")
         search_query = st.text_input("Enter Employee ID or Name to Search:", placeholder="e.g. 114 or Jahir").strip().lower()
         
@@ -297,20 +337,22 @@ else:
                     emp_id_str = str(row["ID"])
                     with st.container():
                         st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 💰 **Salary Due Date:** <span style='color:#ff4b4b; font-weight:bold;'>{row['Salary Due Date']}</span>", unsafe_allow_html=True)
-                        c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7 = st.columns([1, 2, 1.2, 1.2, 1.2, 1.2, 3])
+                        c_s1, c_s2, c_s3, c_s4, c_s5, c_s6, c_s7, c_s8 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4, 3.3])
                         with c_s1:
                             st.write(f"**ID:** {emp_id_str}")
                         with c_s2:
                             st.write(f"**Name:** {row['Name']}")
                         with c_s3:
-                            st.write(f"💼 Present: **{row['Present Days']}**")
+                            st.write(f"🟢 Full: **{row['Full Day']}**")
                         with c_s4:
-                            st.write(f"⚠️ Late: **{row['Late Days']}**")
+                            st.write(f"🟡 Half: **{row['Half Day']}**")
                         with c_s5:
-                            st.write(f"📉 Fine: **₹{row['Late Fine (₹)']}**")
+                            st.write(f"❌ Abs: **{row['Actual Absents']}**")
                         with c_s6:
-                            st.write(f"💰 Net Pay: **₹{row['Net Payable Salary (₹)']}**")
+                            st.write(f"⚠️ Late: **{row['Late Days']}**")
                         with c_s7:
+                            st.write(f"💰 Pay: **₹{row['Net Payable Salary (₹)']}**")
+                        with c_s8:
                             c_btn1, c_btn2 = st.columns(2)
                             with c_btn1:
                                 if st.button(f"🔄 Paid & Refresh", key=f"src_ref_{emp_id_str}", type="primary"):
@@ -335,20 +377,22 @@ else:
                 emp_id_str = str(row["ID"])
                 with st.container():
                     st.markdown(f"🗓️ **Join Date:** {row['Joining Date']} | 📅 **Next Salary Due:** <span style='color:#00ff00; font-weight:bold;'>{row['Salary Due Date']}</span>", unsafe_allow_html=True)
-                    col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7 = st.columns([1, 2, 1.2, 1.2, 1.2, 1.2, 3])
+                    col_emp1, col_emp2, col_emp3, col_emp4, col_emp5, col_emp6, col_emp7, col_emp8 = st.columns([1, 1.8, 1.1, 1.1, 1.1, 1.2, 1.4, 3.3])
                     with col_emp1:
                         st.write(f"**ID:** {emp_id_str}")
                     with col_emp2:
                         st.write(f"**Name:** {row['Name']}")
                     with col_emp3:
-                        st.write(f"💼 Present: **{row['Present Days']}**")
+                        st.write(f"🟢 Full: **{row['Full Day']}**")
                     with col_emp4:
-                        st.write(f"⚠️ Late: **{row['Late Days']}**")
+                        st.write(f"🟡 Half: **{row['Half Day']}**")
                     with col_emp5:
-                        st.write(f"📉 Fine: **₹{row['Late Fine (₹)']}**")
+                        st.write(f"❌ Abs: **{row['Actual Absents']}**")
                     with col_emp6:
-                        st.write(f"💰 Net Pay: **₹{row['Net Payable Salary (₹)']}**")
+                        st.write(f"⚠️ Late: **{row['Late Days']}**")
                     with col_emp7:
+                        st.write(f"💰 Pay: **₹{row['Net Payable Salary (₹)']}**")
+                    with col_emp8:
                         col_mbtn1, col_mbtn2 = st.columns(2)
                         with col_mbtn1:
                             if st.button(f"🔄 Paid & Refresh", key=f"main_ref_{emp_id_str}", type="secondary"):
@@ -358,9 +402,8 @@ else:
                         with col_mbtn2:
                             if st.button(f"🗑️ Delete Account", key=f"main_del_{emp_id_str}", type="secondary"):
                                 delete_user_from_db(emp_id_str)
-                                st.warning(f"Deleted {row['Name']} permanently!")
-                                u_id_check = st.session_state.get('user_id', '')
-                                st.rerun()
+                                        st.warning(f"Deleted {row['Name']} permanently!")
+                                        st.rerun()
                 st.markdown("<hr style='margin:0.5em 0px;'>", unsafe_allow_html=True)
         else:
             st.info("No employee accounts registered yet.")
@@ -376,6 +419,4 @@ else:
         with st.expander("🖨 Showroom Official QR Code"):
             st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={SHOWROOM_QR_SECRET}", width=300)
             
-        st.markdown("---")
-        st.subheader("📋 Overall Master Attendance Logs (All Database)")
-        st.dataframe(df_att, use_container_width=True)
+        st.markdown("
