@@ -192,12 +192,13 @@ if st.session_state.logged_in_uid != "":
     if not user_info:
         st.session_state.logged_in_uid = ""
         st.session_state.is_pin_unlocked = False
-        st.rerun()
+        st.sidebar.button("Refresh System", on_click=st.rerun)
+        st.stop()
         
     # Security PIN Lock Check (For Employees who have set a PIN)
     if user_info["Role"] == "Employee" and user_info["PIN"] != "" and not st.session_state.is_pin_unlocked:
         st.subheader(f"🔒 Profile Locked: {user_info['Name']}")
-        st.info("আপনার প্রোফাইলটি আনলক করতে আপনার ৪ ডিজিটের পিন নম্বরটি দিন।")
+        st.info("আপনার প্রোফাইলটি আনলক করতে ৪ ডিজিটের সিকিউরিটি পিন নম্বর দিন।")
         
         entered_pin = st.text_input("Enter Profile PIN:", type="password", max_chars=4, key="profile_pin_lock_input").strip()
         
@@ -207,14 +208,14 @@ if st.session_state.logged_in_uid != "":
                 if entered_pin == user_info["PIN"]:
                     st.session_state.is_pin_unlocked = True
                     st.success("Access Granted!")
-                    st.rerun()
+                    st.columns([1])[0].button("Enter Dashboard", on_click=st.rerun)
                 else:
-                    st.error("❌ ভুল পিন!")
+                    st.error("❌ ভুল পিন নম্বর!")
         with col_btn2:
             if st.button("Change Account / Full Logout", key="full_logout_from_pin_screen"):
                 st.session_state.logged_in_uid = ""
                 st.session_state.is_pin_unlocked = False
-                st.rerun()
+                st.columns([1])[0].button("Confirm Logout", on_click=st.rerun)
         st.stop()
 
     # Sidebar Profile Info
@@ -234,8 +235,8 @@ if st.session_state.logged_in_uid != "":
                     if len(new_pin) == 4 and new_pin.isdigit():
                         update_user_pin(current_uid, new_pin)
                         st.session_state.is_pin_unlocked = True
-                        st.success("✅ পিন সেট হয়েছে! এরপর থেকে পিন দিয়ে প্রোফাইল খুলবে।")
-                        st.rerun()
+                        st.success("✅ পিন সেট হয়েছে!")
+                        st.columns([1])[0].button("Refresh", on_click=st.rerun)
                     else:
                         st.error("পিন অবশ্যই ৪টি সংখ্যার হতে হবে!")
             else:
@@ -246,14 +247,15 @@ if st.session_state.logged_in_uid != "":
                         update_user_pin(current_uid, change_pin)
                         st.session_state.is_pin_unlocked = True
                         st.success("✅ পিন সফলভাবে পরিবর্তন হয়েছে!")
-                        st.rerun()
+                        st.columns([1])[0].button("Refresh", on_click=st.rerun)
                     else:
                         st.error("পিন অবশ্যই ৪টি সংখ্যার হতে হবে!")
 
     if st.sidebar.button("Full Logout (আইডি-পাসওয়ার্ড মুছুন)", type="secondary", key="sidebar_logout_button"):
         st.session_state.logged_in_uid = ""
         st.session_state.is_pin_unlocked = False
-        st.rerun()
+        st.columns([1])[0].button("Confirm Full Logout", on_click=st.rerun)
+        st.stop()
 
     # --- EMPLOYEE INTERFACE ---
     if user_info["Role"] == "Employee":
@@ -294,9 +296,9 @@ if st.session_state.logged_in_uid != "":
                 new_row = pd.DataFrame([{"Date": c_date, "ID": str(current_uid), "Name": user_info['Name'], "Entry Time": c_time, "Exit Time": "Not Out Yet", "Status": attendance_status, "Is_Late": is_late_status}])
                 save_attendance(pd.concat([df_att, new_row], ignore_index=True))
                 st.success(f"✅ ENTRY Recorded! Status: {attendance_status}")
-                st.rerun()
+                st.columns([1])[0].button("Refresh App", on_click=st.rerun)
         elif today_entry.iloc[0]["Exit Time"] == "Not Out Yet":
-            st.info("⚠️ ছুটির সময় বিদায় নেওয়ার জন্য আবার QR Code স্ক্যান করুন।")
+            st.info("⚠️ ছুটির সময় বিদায় নেওয়ার জন্য আবার QR Code স্ক্যান করুন।")
             val = qrcode_scanner(key='exit_scanner_active_view')
             if val == SHOWROOM_QR_SECRET:
                 if now_k.hour < 14:
@@ -305,7 +307,7 @@ if st.session_state.logged_in_uid != "":
                 df_att.loc[(df_att["Date"] == c_date) & (df_att["ID"].astype(str) == str(current_uid)), "Exit Time"] = c_time
                 save_attendance(df_att)
                 st.success("✅ EXIT Recorded!")
-                st.rerun()
+                st.columns([1])[0].button("Refresh App", on_click=st.rerun)
         else:
             st.success("🎉 Today's Attendance Completed!")
             
@@ -337,7 +339,7 @@ if st.session_state.logged_in_uid != "":
                 else:
                     add_user_to_db(n_id, n_name, n_pass, n_sal, final_shift_time, str(n_jdate))
                     st.success(f"✅ Employee {n_name} added successfully!")
-                    st.rerun()
+                    st.columns([1])[0].button("Refresh Table", on_click=st.rerun)
                     
         st.markdown("---")
         
@@ -379,12 +381,12 @@ if st.session_state.logged_in_uid != "":
                         if st.button("🔄 Paid & Refresh", key=f"search_view_pay_refresh_{emp_id_str}"):
                             clear_employee_attendance(emp_id_str)
                             st.success("Attendance Reset Successfully!")
-                            st.rerun()
+                            st.columns([1])[0].button("Update", on_click=st.rerun)
                     with cb2:
                         if st.button("🗑️ Delete Account", key=f"search_view_delete_account_{emp_id_str}"):
                             delete_user_from_db(emp_id_str)
                             st.warning("Employee Record Deleted!")
-                            st.rerun()
+                            st.columns([1])[0].button("Update", on_click=st.rerun)
                     st.markdown("---")
             else:
                 st.error("❌ No Employee found with this ID or Name.")
@@ -402,13 +404,4 @@ if st.session_state.logged_in_uid != "":
                 col_emp2.write(f"**Name:** {row['Name']}")
                 col_emp3.write(f"🟢 Full: **{row['Full Day']}**")
                 col_emp4.write(f"🟡 Half: **{row['Half Day']}**")
-                col_emp5.write(f"❌ Abs: **{row['Actual Absents']}**")
-                col_emp6.write(f"⚠️ Late: **{row['Late Days']}**")
-                col_emp7.write(f"💰 Pay: **₹{row['Net Payable Salary (₹)']}**")
-                
-                col_mbtn1, col_mbtn2 = st.columns(2)
-                with col_mbtn1:
-                    if st.button("🔄 Paid & Refresh", key=f"master_view_pay_refresh_{emp_id_str}"):
-                        clear_employee_attendance(emp_id_str)
-                        st.success("Attendance Reset Done!")
-                        st.rerun()
+                col_emp5.write(f"❌ Abs: **{r
