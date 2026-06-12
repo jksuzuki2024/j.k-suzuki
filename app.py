@@ -125,21 +125,14 @@ def calculate_salary_report(emp_id, base_salary, joining_date_str):
     
     if not df_att.empty:
         emp_logs = df_att[df_att["ID"].astype(str) == str(emp_id)]
-        # Count Full Present vs Half Day
         full_present_days = len(emp_logs[emp_logs["Status"] == "Present"])
         half_days = len(emp_logs[emp_logs["Status"] == "Half Day"])
         late_days = len(emp_logs[emp_logs["Is_Late"] == "Yes"])
         
-    # Total attendance credit = Full Days + (Half Days * 0.5)
     total_present_credit = full_present_days + (half_days * 0.5)
-    
-    # Real-time Elapsed Absents
     actual_absents = max(0.0, elapsed_days - (full_present_days + half_days))
     
-    # Paid days calculation including fixed 4 allowed holidays
     paid_days = min(total_present_credit + allowed_holidays, total_cycle_days)
-    
-    # Final unworked or unpaid segment out of 30 days
     final_unpaid_absents = max(0.0, total_cycle_days - paid_days)
     
     per_day_salary = base_salary / total_cycle_days
@@ -244,7 +237,6 @@ else:
             if val == SHOWROOM_QR_SECRET:
                 is_late_status = check_if_late(c_time, user_info['Shift_Time'])
                 
-                # Half day check if entering at or after 2:00 PM
                 attendance_status = "Present"
                 if now_k.hour >= 14:
                     attendance_status = "Half Day"
@@ -258,7 +250,6 @@ else:
             st.info("⚠️ ছুটির সময় বিদায় নেওয়ার জন্য আবার QR Code স্ক্যান করুন।")
             val = qrcode_scanner(key='exit_scan')
             if val == SHOWROOM_QR_SECRET:
-                # Half day check if exiting before 2:00 PM
                 if now_k.hour < 14:
                     df_att.loc[(df_att["Date"] == c_date) & (df_att["ID"].astype(str) == str(current_uid)), "Status"] = "Half Day"
                     st.warning("⚠️ আপনি দুপুর ২:০০ টার আগে এক্সিট নিচ্ছেন! এটি Half Day হিসেবে গণ্য করা হলো।")
@@ -297,7 +288,7 @@ else:
                     st.error("❌ Fill all fields!")
                 else:
                     add_user_to_db(n_id, n_name, n_pass, n_sal, final_shift_time, str(n_jdate))
-                    st.success(f"✅ Employee {n_name} added permanently with Joining Date: {n_jdate}!")
+                    st.success(f"✅ Employee {n_name} added permanently!")
                     st.rerun()
                     
         st.markdown("---")
@@ -324,7 +315,7 @@ else:
         
         df_report = pd.DataFrame(report_rows)
         
-        # 🔎 SEARCH EMPLOYEE SECTION (UPDATED DETAILS)
+        # SEARCH EMPLOYEE SECTION
         st.subheader("🔎 Search Employee Profile (আইডি বা নাম দিয়ে খুঁজুন)")
         search_query = st.text_input("Enter Employee ID or Name to Search:", placeholder="e.g. 114 or Jahir").strip().lower()
         
@@ -362,7 +353,7 @@ else:
                             with c_btn2:
                                 if st.button(f"🗑️ Delete Account", key=f"src_del_{emp_id_str}", type="secondary"):
                                     delete_user_from_db(emp_id_str)
-                                    st.warning(f"Deleted {row['Name']} permanently!")
+                                    st.warning(f"Deleted permanently!")
                                     st.rerun()
                     st.markdown("<hr style='margin:0.5em 0px; border-color:#ff4b4b;'>", unsafe_allow_html=True)
             else:
@@ -402,8 +393,8 @@ else:
                         with col_mbtn2:
                             if st.button(f"🗑️ Delete Account", key=f"main_del_{emp_id_str}", type="secondary"):
                                 delete_user_from_db(emp_id_str)
-                                        st.warning(f"Deleted {row['Name']} permanently!")
-                                        st.rerun()
+                                st.warning(f"Deleted permanently!")
+                                st.rerun()
                 st.markdown("<hr style='margin:0.5em 0px;'>", unsafe_allow_html=True)
         else:
             st.info("No employee accounts registered yet.")
@@ -419,4 +410,6 @@ else:
         with st.expander("🖨 Showroom Official QR Code"):
             st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={SHOWROOM_QR_SECRET}", width=300)
             
-        st.markdown("
+        st.markdown("---")
+        st.subheader("📋 Overall Master Attendance Logs (All Database)")
+        st.dataframe(df_att, use_container_width=True)
