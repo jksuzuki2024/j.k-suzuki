@@ -289,7 +289,7 @@ if st.session_state.logged_in_uid != "":
                 save_attendance(pd.concat([df_att, new_row], ignore_index=True))
                 st.rerun()
         elif today_entry.iloc[0]["Exit Time"] == "Not Out Yet":
-            st.info("⚠️ ছুটির সময় বিদায় নিতে পুনরায় QR Code স্ক্যান করুন।")
+            st.info("⚠️ ছুটির সময় বিদায় নিতে পুনরায় QR Code স্ক্যান করুন।")
             val = qrcode_scanner(key='exit_scan')
             if val == SHOWROOM_QR_SECRET:
                 if now_k.hour < 14:
@@ -363,10 +363,10 @@ if st.session_state.logged_in_uid != "":
                 cs2.write(f"**Name:** {row['Name']}")
                 cs3.write(f"🟢 Full: **{row['Full']}**")
                 cs4.write(f"🟡 Half: **{row['Half']}**")
-                cs5.write(f"❌ Effective Abs: **{row['Absent_Days']}**")
+                cs5.write(f"❌ Abs: **{row['Absent_Days']}**")
                 cs6.write(f"⚠️ Late: **{row['Late']}**")
                 cs7.write(f"📉 Cut: **₹{row['Deducted']}**")
-                cs8.write(f"💰 Net Pay: **₹{row['Payable']}**")
+                cs8.write(f"💰 Net: **₹{row['Payable']}**")
                 
                 cb1, cb2 = st.columns(2)
                 with cb1:
